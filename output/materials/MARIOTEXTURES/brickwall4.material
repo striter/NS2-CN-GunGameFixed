@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/MARIOTEXTURES/brickwall4.dds"
+normalMap = "materials/MARIOTEXTURES/brickwall4_normal.dds"
+specularMap = "materials/MARIOTEXTURES/brickwall4_spec.dds"
+surface = "metal"

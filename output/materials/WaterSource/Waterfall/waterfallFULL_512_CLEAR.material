@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/WaterSource/Waterfall/waterfallFULL_512_CLEAR.dds"
+normalMap = "materials/WaterSource/Waterfall/waterfallFULL_512_CLEAR_normal.dds"
+specularMap = "materials/WaterSource/Waterfall/waterfallFULL_512_CLEAR_spec.dds"
+surface = "metal"

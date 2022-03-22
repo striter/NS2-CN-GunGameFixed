@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/real_Lego/Lego_gre_f.dds"
+normalMap = "materials/real_Lego/Lego_gre_f_normal.dds"
+specularMap = "materials/real_Lego/Lego_gre_f_spec.dds"
+surface = "metal"

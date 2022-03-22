@@ -1,0 +1,2 @@
+shader = "shaders/SkyBox.surface_shader"
+emissiveMap = "materials/skybox/sky_kodiakup.dds"

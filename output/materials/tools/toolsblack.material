@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/tools/black.dds"
+normalMap = "materials/tools/black_normal.dds"
+specularMap = "materials/tools/black_spec.dds"
+surface = "metal"

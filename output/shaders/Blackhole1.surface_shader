@@ -1,0 +1,135 @@
+<shader>
+
+	<inputs>
+		<input name="albedoMap" type="texture" address="wrap">materials/skybox/stars_difference.dds</input> 
+	</inputs>
+
+	<code>
+	<![CDATA[
+    
+        //Changed Galaxy3 by  FabriceNeyret2
+        //---  Galaxy --- Fabrice NEYRET  august 2013
+
+        float RETICULATION = 3.0;  // strenght of dust texture
+        float NB_ARMS = 5.0;       // number of arms
+        //float ARM = 3.0;         // contrast in/out arms
+        float COMPR = 0.1;         // compression in arms
+        float SPEED = 0.1;
+        float GALAXY_R = 1./2.;
+        float BULB_R = 1./2.5;
+        float3 GALAXY_COL = float3(0.9,0.9,1.0); //(1.0,0.8,0.5);
+        float3 BULB_COL   = float3(1.0,1.0,1.0);
+        float BULB_BLACK_R = 1.0/4.0;
+        float3 BULB_BLACK_COL   = float3(0,0,0);
+        float3 SKY_COL    = 0.5*float3(0.1,0.3,0.5);
+                
+        float Pi = 3.1415927;
+
+        // --- base noise
+        float tex(float2 uv) 
+        {
+            float n = tex2D(albedoMap,uv).r;
+            
+            //float MODE = 3;  // kind of noise texture
+            //float A = 0;
+            //if (MODE==0  )       // unsigned
+            //    A = 2;
+            //    return n;
+            //elseif (MODE==1)      // signed
+            //    A = 3;
+            //    return 2.*n-1.;
+            //elseif MODE==2)       // bulbs
+            //    A = 3;
+            //    return abs(2.*n-1.);
+            //elseif (MODE==3)      // wires
+                float A = 1.5;
+                return 1.-abs(2.*n-1);
+            //end
+            
+        }
+
+
+        // --- perlin turbulent noise + rotation
+        float noise(float2 uv)
+        {
+            float v=0.0;
+            float t = time;
+            float a=-SPEED*t;
+            float co=cos(a);
+            float si=sin(a); 
+            float s=1.0;
+            float b = tex(uv*s);
+            v += 1.0/s* pow(b,RETICULATION); 
+            s *= 2.0;
+            
+            return v/2.0;
+        }
+
+        bool keyToggle(int ascii) 
+        {
+            return (tex2D(albedoMap,float2((0.5+float(ascii))/256.0,0.75)).x > 0.0);
+        }
+
+
+        float fract( float x )
+        {
+            return x - floor(x);
+        }
+        
+        float3 DecodeNormal(const float4 texNormal)
+		{
+			float4 n = texNormal * 2 - 1;
+			//return float3(n.a, n.g, sqrt(1 - dot(n.ag, n.ag)) );
+			return n.xyz;
+		}
+        
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+            float2 center = float2(0.5, 0.5);
+            float2 uv = input.texCoord.xy/center.y;
+            float3 col;
+            
+            // spiral stretching with distance
+            float rho = length(uv); // polar coords
+            float ang = atan2(uv.y,uv.x);
+            float shear = 2.0*sin(rho); // logarythmic spiral
+            float c = cos(shear);
+            float s = sin(shear);
+
+            // galaxy profile
+            float r; // disk
+            r = rho/GALAXY_R; 
+            float dens = pow(-r*r, 2.0);
+            r = rho/BULB_R;	  
+            float bulb = pow(-r*r, 2.0);
+            r = rho/BULB_BLACK_R; 
+            float bulb_black = pow(-r*r, 2.0);
+            float phase = NB_ARMS*(ang-shear);
+
+            float t = time;
+            ang = ang-COMPR*cos(phase)+SPEED*t;
+            uv = rho*float2(cos(ang),sin(ang));
+
+            float spires = 1.0+NB_ARMS*COMPR*sin(phase);
+
+            dens *= 0.7*spires;	
+            
+            // gaz texture
+            float gaz = noise(.09*1.2*uv);
+            float gaz_trsp = pow((1.0-gaz*dens),2.0);
+
+            // lerp all	
+            col = lerp(SKY_COL,
+                      gaz_trsp*(1.7*GALAXY_COL) + 1.2, 
+                      dens);
+            col = lerp(col, 2.0*BULB_COL,1.2* bulb);
+
+            col = lerp(col, 1.2*BULB_BLACK_COL, 2.0*bulb_black);
+
+			material.albedo = float4(col,1.0);
+            //material.ssDistortion = DecodeNormal(float4(col,1.0));
+		}
+	]]>
+	</code>
+
+</shader>

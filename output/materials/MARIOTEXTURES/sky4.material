@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/MARIOTEXTURES/sky4.dds"
+normalMap = "materials/MARIOTEXTURES/sky4_normal.dds"
+specularMap = "materials/MARIOTEXTURES/sky4_spec.dds"
+surface = "metal"

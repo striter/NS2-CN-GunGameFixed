@@ -1,0 +1,6 @@
+shader = "shaders/Model_emissive.surface_shader"
+albedoMap = "models/props_c17/light_floodlight02_off.dds"
+normalMap = "models/props_c17/light_floodlight02_off_normal.dds"
+emissiveMap = "models/props_c17/light_floodlight02_off_illum.dds"
+specularMap = "models/props_c17/light_floodlight02_off_spec.dds"
+surface = "thin_metal"

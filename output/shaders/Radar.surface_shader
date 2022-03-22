@@ -1,0 +1,68 @@
+<shader>
+	
+	<inputs>
+		<input name="emissiveMap" type="texture" address="wrap">materials/skybox/stars_difference.dds</input> 
+	</inputs>
+	
+	<code>
+	<![CDATA[
+        
+        
+        float fract( float x )
+        {
+            return x - floor(x);
+        }
+
+        float3 color(float d) {
+            return d * float3(0.1, 1, 0.1);	
+        }
+
+        float smoothstep( float edge0, float edge1, float x )
+        {
+            float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+            return t * t * (3.0 - 2.0 * t);
+        }
+        
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+            
+            float2 screenCenter = float2(0.5, 0.5);
+            float PI = atan2(1.0, 1.0)*4.0;
+
+            float2 ufoset[3];
+
+            ufoset[0].x = 0;
+            ufoset[0].y = 0.75;
+            
+            ufoset[1].x = -0.38;
+            ufoset[1].y = -0.35;
+            
+            ufoset[2].x = 0.62;
+            ufoset[2].y = -0.5;
+            
+            
+            float2 p = (-1.0 + 2.0 * ((input.texCoord.xy) / screenCenter.xy));
+            p.x *= (screenCenter.x / screenCenter.y);
+
+            float a = (atan2(p.x,p.y) + time);
+            float r = dot(p,p);
+            float ufos = 0.0;
+            
+            for (int i = 0; i < 3; ++i)
+            {
+                ufos += 0.01 / length(p - (-ufoset[i].xy));
+            }
+
+            ufos *= pow(fract(a/PI / -2.0), 5.0);
+            
+            float3 col = color(pow(fract(a/PI / -2.0), 20.0) + ufos) * (1.0 - smoothstep(0.98, 1.0, r));
+            
+            material.albedo = float3(0, 0, 0);
+            material.emissive = col;
+    
+            
+		}
+	]]>
+	</code>
+
+</shader>

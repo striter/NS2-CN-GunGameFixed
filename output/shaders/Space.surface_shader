@@ -1,0 +1,162 @@
+<shader>
+
+	<inputs>
+		<input name="rotation" type="float">0</input>
+	</inputs>
+
+	<code>
+	<![CDATA[
+    
+        // Star Tunnel - @P_Malin
+        // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+        //
+        // Single pass starfield inspired by old school tunnel effects.
+        // Each angular segment of space around the viewer selects a random star position radius and depth repeat rate.
+
+        float fBrightness = 0.1;
+
+        // Number of angular segments
+        float fSteps = 30.0;
+
+        float fParticleSize = 0.015;
+
+        // Min and Max star position radius. Min must be present to prevent stars too near camera
+        float fMinDist = 0.8;
+        float fMaxDist = 5.0;
+
+        float fRepeatMin = 5.0;
+        float fRepeatMax = 25.0;
+
+        // fog density
+        float fDepthFade = 0.8;
+
+        float fract( float x )
+        {
+            return x - floor(x);
+        }
+        
+        float Random(float x)
+        {
+            return fract(sin(x * 123.456) * 23.4567 + sin(x * 345.678) * 45.6789 + sin(x * 456.789) * 56.789);
+        }
+
+        float3 GetParticleColour( float3 vParticlePos, float fParticleSize, float3 vRayDir, float fParticleLength)
+        {		
+            float2 vNormDir = normalize(vRayDir.xy);
+            float d1 = dot(vParticlePos.xy, vNormDir.xy) / length(vRayDir.xy);
+            float3 vClosest2d = vRayDir * d1;
+            
+            float3 vClampedPos = vParticlePos;
+            
+            vClampedPos.z = clamp(vClosest2d.z, vParticlePos.z - fParticleLength, vParticlePos.z + fParticleLength);
+            
+            float d = dot(vClampedPos, vRayDir);
+            
+            float3 vClosestPos = vRayDir * d;
+            
+            float3 vDeltaPos = vClampedPos - vClosestPos;	
+                
+            float fClosestDist = length(vDeltaPos) / fParticleSize;
+            
+            float fShade = 	clamp(1.0 - fClosestDist, 0.0, 1.0);
+                
+            fShade = fShade * pow(-d * fDepthFade, 2) * fBrightness;
+            
+            return float3(fShade, fShade, fShade);
+        }
+
+        float3 GetParticlePos( float3 vRayDir, float fZPos, float fSeed )
+        {
+            float fAngle = atan2(vRayDir.x, vRayDir.y);
+            float fAngleFraction = fract(fAngle / (3.14 * 2.0));
+            
+            float fSegment = floor(fAngleFraction * fSteps + fSeed) + 0.5 - fSeed;
+            float fParticleAngle = fSegment / fSteps * (3.14 * 2.0);
+
+            float fSegmentPos = fSegment / fSteps;
+            float fRadius = fMinDist + Random(fSegmentPos + fSeed) * (fMaxDist - fMinDist);
+            
+            float tunnelZ = vRayDir.z / length(vRayDir.xy / fRadius);
+            
+            tunnelZ += fZPos;
+            
+            float fRepeat = fRepeatMin + Random(fSegmentPos + 0.1 + fSeed) * (fRepeatMax - fRepeatMin);
+            
+            float fParticleZ = (ceil(tunnelZ / fRepeat) - 0.5) * fRepeat - fZPos;
+            
+            return float3( sin(fParticleAngle) * fRadius, cos(fParticleAngle) * fRadius, fParticleZ );
+        }
+
+        float3 Starfield( float3 vRayDir, float fZPos, float fSeed, float fParticleLength )
+        {	
+            float3 vParticlePos = GetParticlePos(vRayDir, fZPos, fSeed);
+            
+            return GetParticleColour(vParticlePos, fParticleSize, vRayDir, fParticleLength);	
+        }
+
+        float3 RotateX( float3 vPos, float fAngle )
+        {
+            float s = sin(fAngle);
+            float c = cos(fAngle);
+            
+            float3 vResult = float3( vPos.x, c * vPos.y + s * vPos.z, -s * vPos.y + c * vPos.z);
+            
+            return vResult;
+        }
+
+        float3 RotateY( float3 vPos, float fAngle )
+        {
+            float s = sin(fAngle);
+            float c = cos(fAngle);
+            
+            float3 vResult = float3( c * vPos.x + s * vPos.z, vPos.y, -s * vPos.x + c * vPos.z);
+            
+            return vResult;
+        }
+
+        float3 RotateZ( float3 vPos, float fAngle )
+        {
+            float s = sin(fAngle);
+            float c = cos(fAngle);
+            
+            float3 vResult = float3( c * vPos.x + s * vPos.y, -s * vPos.x + c * vPos.y, vPos.z);
+            
+            return vResult;
+        }
+        
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+            float2 vScreenPos = input.texCoord * 2.0 - 1.0;
+            vScreenPos.x *= 16/9;
+
+            float3 vRayDir = normalize(float3(vScreenPos, 1.0));
+
+            float3 vEuler = float3(0,1.57 * rotation,0);
+
+            vRayDir = RotateX(vRayDir, vEuler.x);
+            vRayDir = RotateY(vRayDir, vEuler.y);
+            vRayDir = RotateZ(vRayDir, vEuler.z);
+            
+            float fShade = 0.0;
+                
+            float a = 0.2;
+            float b = 10.0;
+            float c = 1.0;
+            float fZPos = time * b * 0.5;
+            float fSpeed = c + a * b;
+            
+            float fParticleLength = 0.25 * fSpeed / 60.0;
+            
+            float fSeed = 0.0;
+            
+            float3 vResult = float3(0.0, 0.0, 0.0);
+            
+            vResult = Starfield(vRayDir, fZPos, fSeed, fParticleLength);
+            fSeed += 1.234;
+            
+			material.emissive = float4(sqrt(vResult),0.1);
+		}
+	]]>
+	</code>
+
+</shader>

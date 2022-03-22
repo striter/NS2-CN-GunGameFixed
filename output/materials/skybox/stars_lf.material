@@ -1,0 +1,3 @@
+shader = "shaders/Stars.surface_shader"
+emissiveMap = "materials/skybox/stars_lf.dds"
+flickerSpeed = 0.1

@@ -1,0 +1,119 @@
+<shader>
+	
+	<inputs>
+		<input name="emissiveMap" type="texture" address="wrap">materials/dev/dev_white.dds</input> 
+	</inputs>
+	
+	<code>
+	<![CDATA[
+    
+        float2 distance( float2 x, float2 y )
+        {
+            return abs(length(x-y));
+        }
+        
+        float smoothstep( float edge0, float edge1, float x )
+        {
+            float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+            return t * t * (3.0 - 2.0 * t);
+        }
+        
+        float sdSphere( float3 p, float s )
+        {
+          return length(p)-s;
+        }
+
+        float sdCappedCylinder( float3 p, float2 h )
+        {
+          float2 d = abs(float2(length(p.xz),p.y)) - h;
+          return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+        }
+
+        float sdTorus( float3 p, float2 t )
+        {
+          float2 q = float2(length(p.xz)-t.x,p.y);
+          return length(q)-t.y;
+        }
+
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+
+            float pi = 3.1415927;
+            float2 screenCenter = float2(0.5, 0.5);
+
+            float2 pp = input.texCoord.xy/screenCenter.xy;
+            pp = -1.0 + 2.0*pp;
+            pp.x *= screenCenter.x/screenCenter.y;
+
+            float3 lookAt = float3(0.0, -0.1, 0.0);
+            
+            float eyer = 2.0;
+            float eyea = (screenCenter.x / screenCenter.x) * pi * 2.0;
+            float eyea2 = ((screenCenter.y / screenCenter.y)-0.24) * pi * 2.0;
+            
+            float3 ro = float3(
+                eyer * 1.0,
+                eyer * 0.1,
+                eyer * 0.0); //camera position
+            
+            float3 front = normalize(lookAt - ro);
+            float3 left = normalize(cross(normalize(float3(0.0,1,-0.1)), front));
+            float3 up = normalize(cross(front, left));
+            float3 rd = normalize(front*1.5 + left*pp.x + up*pp.y); // rect floattor
+            
+            float3 bh = float3(0.0,0.0,0.0);
+            float bhr = 0.1;
+            float bhmass = 5.0;
+            bhmass *= 0.001; // premul G
+            
+            float3 p = ro;
+            float3 pv = rd;
+            float dt = 0.02;
+            
+            float3 col = float3(0.0, 0.0, 0.0);
+            
+            float noncaptured = 1.0;
+            
+            float3 c1 = float3(0.5,0.35,0.1);
+            float3 c2 = float3(1.0,0.8,0.6);
+            
+            
+            for(float t=0;t<100;t++)
+            {
+                p += pv * dt * noncaptured;
+                
+                // gravity
+                float3 bhv = bh - p;
+                float r = dot(bhv,bhv);
+                pv += normalize(bhv) * ((bhmass) / r);
+                
+                //noncaptured = smoothstep(0.0, 0.666, sdSphere(p-bh,bhr));
+                
+                // Texture for the accretion disc
+                //float dr = length(bhv.xz);
+                //float da = atan2(bhv.z,bhv.x);
+                //float2 ra = float2(dr,da * (0.01 + (dr - bhr)*0.002) + 2.0 * pi + time*0.02 );
+                //ra *= float2(10.0,20.0);
+                
+                //float3 dcol = lerp(c2,c1,pow(length(bhv)-bhr,2.0)) * max(0.0,tex2D(emissiveMap,ra*float2(0.1,0.5)).r+0.05) * (4.0 / ((0.001+(length(bhv) - bhr)*50.0) ));
+                
+                //col += max(float3(0.0, 0.0, 0.0),dcol * smoothstep(0.0, 1.0, -sdTorus( (p * float3(1.0,25.0,1.0)) - bh, float2(0.8,0.99))) * noncaptured);
+                //col += max(float3(0.0, 0.0, 0.0), smoothstep(0.0, 1.0, -sdTorus( (p * float3(1.0,25.0,1.0)) - bh, float2(0.8,0.99))) * noncaptured);
+                
+                //col += dcol * (1.0/dr) * noncaptured * 0.01;
+                
+                // Glow
+                //col += float3(1.0,0.9,0.85) * (1.0/float3(dot(bhv,bhv), dot(bhv,bhv), dot(bhv,bhv))) * 0.0033 * noncaptured;
+                
+            }
+
+            col += pow(input.color.rgb, 3.0);
+            
+            // Final color
+            material.ssDistortion = float4(col, 1.0);
+    
+		}
+	]]>
+	</code>
+
+</shader>

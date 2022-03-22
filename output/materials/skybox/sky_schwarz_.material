@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/skybox/sky_schwarz.dds"
+normalMap = "materials/skybox/sky_schwarz_.dds"
+specularMap = "materials/skybox/sky_schwarz_.dds"
+surface = "metal"

@@ -1,0 +1,7 @@
+shader = "shaders/Model_emissive.surface_shader"
+albedoMap = "materials/CUSTOMS/hellblau_neon.dds"
+normalMap = "materials/CUSTOMS/hellblau_neon.dds"
+specularMap = "materials/CUSTOMS/hellblau_neon.dds"
+emissiveMap = "materials/CUSTOMS/hellblau_neon.dds"
+
+surface = "metal"

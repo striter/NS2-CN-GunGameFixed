@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/CUSTOMS/texweiss_1.dds"
+normalMap = "materials/CUSTOMS/texweiss_1_normal.dds"
+specularMap = "materials/CUSTOMS/texweiss_1_spec.dds"
+surface = "metal"

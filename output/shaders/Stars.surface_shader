@@ -1,0 +1,33 @@
+<shader>
+	
+	<inputs>
+		<input name="emissiveMap" type="texture" address="wrap" srgb="true"/>
+		<input name="flickerMap" type="texture" address="wrap">materials/skybox/stars_difference.dds</input> 
+        <input name="light_threshold" type="float">0.01</input>
+		<input name="flickerSpeed" type="float">0.05</input>
+	</inputs>
+	
+	<code>
+	<![CDATA[
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+			float flicker = tex2D(flickerMap, float2(time * flickerSpeed, 0) + input.texCoord).r;
+			float4 tex = tex2D(emissiveMap, input.texCoord);
+            
+            material.albedo   = float3(0, 0, 0);
+            
+            if (tex.r > light_threshold && tex.g > light_threshold && tex.b > light_threshold) {
+                material.emissive = tex.rgb * input.color.rgb * 60 * flicker;
+                material.opacity = tex.rgb;
+            }
+            else
+            {
+                material.emissive = tex.rgb * input.color.rgb;
+                material.opacity = tex.a * input.color.a;
+            }
+
+		}
+	]]>
+	</code>
+
+</shader>

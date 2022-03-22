@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/AERISWEET/bowser2.dds"
+normalMap = "materials/AERISWEET/bowser2_normal.dds"
+specularMap = "materials/AERISWEET/bowser2_spec.dds"
+surface = "metal"

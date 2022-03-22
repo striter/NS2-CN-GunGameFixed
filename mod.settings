@@ -1,0 +1,39 @@
+name        = "[CN] GunGame Patch"
+source_dir  = "source"
+output_dir  = "output"
+description = [=[CN Community's Gungame Patch/
+Made some debugging.
+Also patched it up with all available gungame maps
+
+Changes:
+Catpack will heal marine on touch +100health
+Self health/armor regen when out of combat
+GL damage to 100
+
+Concat me case you want this mod deleted.
+
+Source 1 Meteru's mod:
+https://steamcommunity.com/sharedfiles/filedetails/?id=1881042588&searchtext=gungame
+
+Source 2 ZycaR's mod:
+https://steamcommunity.com/sharedfiles/filedetails/?id=628353907&searchtext=gungame
+
+also its a mappack
+//ZycaR's
+gg_basic
+gg_match
+gg_pyramid
+gg_shelter
+
+//Archies (Simplified the name for better recognition)
+gg_mario
+https://steamcommunity.com/sharedfiles/filedetails/?id=646264396&searchtext=gungame
+gg_lego
+https://steamcommunity.com/sharedfiles/filedetails/?id=778063986&searchtext=gungame
+gg_natus
+https://steamcommunity.com/sharedfiles/filedetails/?id=781531207&searchtext=gungame
+]=]
+image       = "preview.jpg"
+tag_modtype = "Custom Game Mode"
+tag_support = ""
+publish_id = 2761540034

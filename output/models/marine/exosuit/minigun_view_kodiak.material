@@ -1,0 +1,9 @@
+shader = "shaders/ExoMinigunView.surface_shader"
+albedoMap = "models/marine/exosuit/minigun_view_kodiak.dds"
+normalMap = "models/marine/exosuit/minigun_view_normal.dds"
+specularMap = "models/marine/exosuit/minigun_view_spec.dds"
+emissiveMap = "materials/dev/black.dds"
+modelColorMap = "models/marine/exosuit/minigun_view_colormap.dds"
+numColumns = 1
+numRows = 2
+surface = "metal"

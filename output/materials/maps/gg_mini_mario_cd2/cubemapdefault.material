@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/maps/gg_mini_mario_cd2/cubemapdefault.dds"
+normalMap = "materials/maps/gg_mini_mario_cd2/cubemapdefault_normal.dds"
+specularMap = "materials/maps/gg_mini_mario_cd2/cubemapdefault_spec.dds"
+surface = "metal"

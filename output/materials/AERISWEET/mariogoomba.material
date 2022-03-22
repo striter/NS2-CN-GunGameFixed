@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/AERISWEET/mariogoomba.dds"
+normalMap = "materials/AERISWEET/mariogoomba_normal.dds"
+specularMap = "materials/AERISWEET/mariogoomba_spec.dds"
+surface = "metal"

@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/AERISWEET/SuperMarioWorld.dds"
+normalMap = "materials/AERISWEET/SuperMarioWorld_normal.dds"
+specularMap = "materials/AERISWEET/SuperMarioWorld_spec.dds"
+surface = "metal"

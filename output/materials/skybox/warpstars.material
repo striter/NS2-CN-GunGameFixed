@@ -1,0 +1,2 @@
+shader = "shaders/Warpstars.surface_shader"
+emissiveMap = "materials/eon/star_noise.dds"

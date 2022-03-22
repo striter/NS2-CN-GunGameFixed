@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/boharox/lego/dawall_03.dds"
+normalMap = "materials/boharox/lego/dawall_03_normal.dds"
+specularMap = "materials/boharox/lego/dawall_03_spec.dds"
+surface = "metal"

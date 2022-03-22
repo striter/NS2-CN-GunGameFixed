@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/MARIOTEXTURES/bowser.dds"
+normalMap = "materials/MARIOTEXTURES/bowser_normal.dds"
+specularMap = "materials/MARIOTEXTURES/bowser_spec.dds"
+surface = "metal"

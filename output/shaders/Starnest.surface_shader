@@ -1,0 +1,75 @@
+<shader>
+	
+	<inputs>
+		<input name="emissiveMap" type="texture" address="wrap">materials/skybox/stars_difference.dds</input> 
+	</inputs>
+	
+	<code>
+	<![CDATA[
+    
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+            // Star Nest by Pablo Román Andrioli
+            // Modified a lot.
+
+            // This content is under the MIT License.
+
+            float iterations = 15;
+            float formuparam = 0.530;
+
+            float volsteps = 18;
+            float stepsize = 0.120;
+
+            float zoom   = 0.900;
+            float tile   = 0.850;
+            float speed  = 0.000001;
+
+            float brightness = 0.0015;
+            float darkmatter = 0.400;
+            float distfading = 0.760;
+            float saturation = 0.800;
+            
+            float2 screenCenter = float2(0.5, 0.5);
+            
+            //get coords and direction
+            float2 uv = input.texCoord.xy/screenCenter.xy-.5;
+            uv.y *= screenCenter.y/screenCenter.x;
+            float3 dir = float3(uv*zoom,1.0);
+            
+            float a2 = time*speed+0.5;
+            float a1 = 0.0;
+            
+            float3 from = float3(0.0,0.0,0.0);
+            from += float3(.05*time,0.0,-2.0);
+            
+            //volumetric rendering
+            float s = 0.4;
+            float fade = 0.2;
+            float3 v = float3(0.4, 0.4, 0.4);
+            for (int r=0; r<volsteps; r++) {
+                float3 p = from + s*dir *0.5;
+                p = abs(float3(tile, tile, tile) - fmod(p,float3(tile*2.0, tile*2.0, tile*2.0))); // tiling fold
+                float pa = 0.0;
+                float a = pa;
+                for (int i=0; i<iterations; i++) { 
+                    p = abs(p)/dot(p,p)-formuparam; // the magic formula
+                    a += abs(length(p)-pa); // absolute sum of average change
+                    pa = length(p);
+                }
+                float dm = max(0.0,darkmatter-a*a*.001); //dark matter
+                a *= a*a*2.0; // add contrast
+                if (r>3) fade *= 1.0-dm; // dark matter, don't render near
+                //v += float3(dm,dm*.5,0.0);
+                v += fade;
+                v += float3(s,s*s,s*s*s*s)*a*brightness*fade; // coloring based on distance
+                fade *= distfading; // distance fading
+                s += stepsize;
+            }
+            v = lerp(float3(length(v), length(v), length(v)),v,saturation); //color adjust
+            material.emissive = float3(v*.01);	
+            
+		}
+	]]>
+	</code>
+
+</shader>

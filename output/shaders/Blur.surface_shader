@@ -1,0 +1,37 @@
+<shader>
+	
+	<inputs>
+		<input name="emissiveMap" type="texture" address="wrap">materials/eon/floor_02.dds</input> 
+	</inputs>
+	
+	<code>
+	<![CDATA[
+    
+        float fract( float x )
+        {
+            return x - floor(x);
+        }
+
+		void MaterialShader(in Material_Input input, inout Material material)
+		{
+
+            float2 screenCenter = float2(0.5, 0.5);
+            
+            const float offset[3] = { 0.0, 1.3846153846, 3.2307692308 };
+            const float weight[3] = { 0.2270270270, 0.3162162162, 0.0702702703 };
+    
+            float4 result = tex2D( emissiveMap, input.texCoord ) * weight[0];
+            for (int i = 1; i < 3; ++i)
+            {
+                float2 dt = float2(offset[i] , 0.0f);
+                result += tex2D( emissiveMap, input.texCoord + dt ) * weight[i];
+                result += tex2D( emissiveMap, input.texCoord - dt ) * weight[i];
+            }
+            
+            material.emissive = result;
+            
+		}
+	]]>
+	</code>
+
+</shader>

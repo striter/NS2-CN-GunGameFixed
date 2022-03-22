@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/AERISWEET/GiantMario.dds"
+normalMap = "materials/AERISWEET/GiantMario_normal.dds"
+specularMap = "materials/AERISWEET/GiantMario_spec.dds"
+surface = "metal"

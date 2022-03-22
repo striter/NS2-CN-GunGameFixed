@@ -1,0 +1,6 @@
+shader = "shaders/Model_emissive.surface_shader"
+albedoMap = "models/props/cs_office/light_inset.dds"
+normalMap = "models/props/cs_office/light_inset_normal.dds"
+emissiveMap = "models/props/cs_office/light_inset_illum.dds"
+specularMap = "models/props/cs_office/light_inset_spec.dds"
+surface = "thin_metal"

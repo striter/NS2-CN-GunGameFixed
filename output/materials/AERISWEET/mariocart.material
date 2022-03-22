@@ -1,0 +1,5 @@
+shader = "shaders/Model.surface_shader"
+albedoMap = "materials/AERISWEET/mariocart.dds"
+normalMap = "materials/AERISWEET/mariocart_normal.dds"
+specularMap = "materials/AERISWEET/mariocart_spec.dds"
+surface = "metal"
