@@ -163,6 +163,11 @@
 --                                      avoiding the bilinear interpolation, but at the cost of
 --                                      smoothness when animating, and less precision for kerning.
 --      
+--      AlignsToPixels                  True/false.  Set whether or not to make item rects snap to
+--                                      pixels.  Snapping to pixels avoids edge artifacts by
+--                                      avoiding the bilinear interpolation, but at the cost of
+--                                      smoothness when animating.
+--      
 --      StencilFunc                     Sets the stencil mode which will change how pixels are
 --                                      rendered into the stencil buffer.  Options are:
 --                                          GUIItem.Always, -- default
@@ -334,6 +339,7 @@ g_GUIItemFakeProperties =
     Shader                        = { type = "string",  getter = GUIItem.GetShader,                        setter = GUIItem.SetShader,                        },
     Size                          = { type = "Vector",  getter = GUIItem.GetSize,                          setter = GUIItem.SetSize,                          },
     SnapsToPixels                 = { type = "boolean", getter = GUIItem.GetSnapsToPixels,                 setter = GUIItem.SetSnapsToPixels,                 },
+    AlignsToPixels                = { type = "boolean", getter = GUIItem.GetAlignsToPixels,                setter = GUIItem.SetAlignsToPixels,                },
     StencilFunc                   = { type = "number",  getter = GUIItem.GetStencilFunc,                   setter = GUIItem.SetStencilFunc,                   },
     Text                          = { type = "string",  getter = GUIItem.GetText,                          setter = GUIItem.SetText,                          },
     Texture                       = { type = "string",  getter = GUIItem.GetTexture,                       setter = GUIItem.SetTexture,                       },
@@ -393,6 +399,8 @@ end
 ---@field public SetSize function
 ---@field public GetSnapsToPixels function
 ---@field public SetSnapsToPixels function
+---@field public GetAlignsToPixels function
+---@field public SetAlignsToPixels function
 ---@field public GetStencilFunc function
 ---@field public SetStencilFunc function
 ---@field public GetText function
@@ -501,16 +509,16 @@ local function GetAnimatedPropertyBaseValue(self, propertyName)
 end
 
 local function InstancePropertyGetter(self, propertyName)
-    
+
     local instancePropertyFieldName = GetInstancePropertyFieldName(propertyName)
     local result = self[instancePropertyFieldName]
     assert(result ~= nil)
     return result
-    
+
 end
 
 local function FakePropertyGetter(self, propertyName)
-    
+
     local itemGetter = GetGUIItemPropertyGetter(propertyName)
     assert(itemGetter)
     local result = itemGetter(self:GetRootItem())
@@ -528,7 +536,7 @@ end
 
 -- Sets the value of a non-fake property.
 local function InstancePropertySetter(self, propertyName, value)
-    
+
     local instancePropertyFieldName = GetInstancePropertyFieldName(propertyName)
     local noCopyFieldName = GetInstancePropertyNoCopyFieldName(propertyName)
     local noCopy = noCopyFieldName ~= nil and self[noCopyFieldName] == true
@@ -537,63 +545,63 @@ local function InstancePropertySetter(self, propertyName, value)
     else
         self[instancePropertyFieldName] = Copy(value)
     end
-    
+
 end
 GUIObject._InstancePropertySetter = InstancePropertySetter
 
 local fakePropertySetters = {}
 local function GetFakePropertySetter(itemName)
-    
+
     itemName = itemName or "rootItem"
     local key = itemName.."_property_setter"
-    
+
     local setter = fakePropertySetters[key]
     if not setter then
         setter = function(self, propertyName, value)
-            
+
             local itemSetter = GetGUIItemPropertySetter(propertyName)
             assert(itemSetter)
             assert(itemName ~= nil)
-            
+
             local item = self[itemName]
             if not item then
                 error(string.format("Unable to find member item named '%s'!", itemName), 2)
             end
-    
+
             itemSetter(self[itemName], value)
-            
+
         end
         fakePropertySetters[key] = setter
     end
-    
+
     return setter
-    
+
 end
 
 local function FirePropertyChangeEvent(self, propertyName, value, prevValue)
-    
+
     -- Only call self:FireEvent() if we don't already have one queued up.  If we DO have one
     -- already queued up, update its "after" value to reflect the changes here (and leave prevValue
     -- untouched, since the prevValue this function was called with won't ever be reacted to since
     -- we're switching off it).
-    
+
     if not self.callbacks then
         return -- nothing is listening to this object.
     end
-    
+
     -- Unfortunately this means rolling our own new fire event function...
     local eventName = GetChangedEventNameForProperty(propertyName)
-    
+
     for i=1, #self.callbacks do
         local callback = self.callbacks[i]
-        
+
         if callback.eventName == eventName then
-            
+
             -- Fire/update this event.  Check to see if we have one already in the pipe.
             local usingPrevValue = prevValue
             local callbackRef -- found callback ref
             local callbackRefs = GetGUIEventManager():GetCallbackRefs(callback)
-            
+
             -- Should only ever have at-most one of these callbacks in the pipe at a time... but
             -- its possible a user is sending their own.  Just pick the first valid one in this
             -- case.
@@ -601,30 +609,30 @@ local function FirePropertyChangeEvent(self, propertyName, value, prevValue)
                 assert(not callbackRefs[1].removed)
                 callbackRef = callbackRefs[1]
             end
-            
+
             if callbackRef then
                 usingPrevValue = callbackRef[3] -- third slot is second parameter, which is prevValue.
-                
+
                 -- Remove all the callback refs, in order to make it unique.
                 GetGUIEventManager():OnCallbackRemoved(callback)
             end
-            
+
             -- If a value is set, and then immediately changed back before the event can fire, (eg
             -- prevValue and value are the same), the event should not fire, since no change has
             -- officially taken place.
             local same = GetAreValuesTheSame(usingPrevValue, value)
-            
+
             if not same then
                 GetGUIEventManager():EnqueueEventCallback(callback, value, usingPrevValue)
             end
-            
+
         end
     end
-    
+
     if not self.eventsPaused then
         GetGUIEventManager():ProcessEventQueue()
     end
-    
+
 end
 
 -- Sets the property to the value, which may involve updating the animated base value rather than a
@@ -632,50 +640,50 @@ end
 -- before.  "setter" is a function used to set the property if it is not animated.  This will be
 -- either "InstancePropertySetter", or "FakePropertySetter"
 local function PerformSetterDuties(self, propertyName, value, setter, altPropertyName, noEvent)
-    
+
     if value == nil then
         return true
     end
     
     assert(value ~= nil)
-    
+
     local prevValue = self:Get(propertyName)
-    
+
     -- Update property base value in animation manager, if it is animating.  This function also
     -- provides a check for if the value was changed, so this event will only fire when the base
     -- value changes.
     if SetForAnimatingProperty(self, propertyName, value, prevValue) then
-        
+
         if not noEvent then
             FirePropertyChangeEvent(self, propertyName, value, prevValue)
         end
-        
+
         return true
     end
-    
+
     -- Don't change any values or fire any events if the value was unchanged.
     local same = GetAreValuesTheSame(prevValue, value)
     if same then
         return false
     end
-    
+
     -- If this property name is being traced, log this change.
     if self.debugLogProperties and self.debugLogProperties[propertyName] then
         Log("Property '%s' of '%s' about to change from '%s' to '%s'... trace:\n%s", propertyName, self:GetName(), prevValue, value, Debug_GetStackTraceForEvent(true))
     end
-    
+
     setter(self, altPropertyName, value)
     if not noEvent then
         FirePropertyChangeEvent(self, propertyName, value, prevValue)
     end
-    
+
     return true
-    
+
 end
 GUIObject._PerformSetterDuties = PerformSetterDuties -- occasionally another object will need to use this.
 
 local function PerformGetterDuties(self, propertyName, static, getter)
-    
+
     -- If the non-animated value is requested, check and see if this value is animating.  If so,
     -- return the base value.
     if static == true then
@@ -684,13 +692,13 @@ local function PerformGetterDuties(self, propertyName, static, getter)
             return result
         end
     end
-    
+
     -- Not animated, or didn't request non-animated value.  Get the value.
     local value = getter(self, propertyName)
     assert(value ~= nil)
-    
+
     return value
-    
+
 end
 GUIObject._PerformGetterDuties = PerformGetterDuties -- occasionally another object will need to use this.
 
@@ -698,25 +706,25 @@ local ProcessVectorInput = ProcessVectorInput -- from GUIItemExtras.lua
 local ProcessColorInput = ProcessColorInput -- from GUIItemExtras.lua
 
 local function AutomaticallyDefineSetterAndGetter(owner, propertyName, propertyType)
-    
+
     -- Getter
     local getterName = GetGetterNameForProperty(propertyName)
     if not owner[getterName] then
         owner[getterName] = GUIObject.GetAutoGeneratedGetter(propertyName)
     end
-    
+
     -- Setter
     local setterName = GetSetterNameForProperty(propertyName)
     if not owner[setterName] then
         owner[setterName] = GUIObject.GetAutoGeneratedSetter(propertyName, propertyType)
     end
-    
+
     -- Raw Setter
     local rawSetterName = GetRawSetterNameForProperty(propertyName)
     if not owner[rawSetterName] then
         owner[rawSetterName] = GUIObject.GetAutoGeneratedRawSetter(propertyName, propertyType)
     end
-    
+
 end
 
 local function DoPropertyAlreadyExistsError(propertyName, errorDepth)
@@ -778,7 +786,7 @@ local function ValidatePropertyCreation(propertyName, instance, cls, defaultValu
     errorDepth = (errorDepth or 1) + 1
 
     ValidatePropertyName(propertyName, 1, errorDepth)
-    
+
     -- Ensure property does not already exist.
     if instance == nil then
         assert(cls ~= nil)
@@ -791,7 +799,7 @@ local function ValidatePropertyCreation(propertyName, instance, cls, defaultValu
             DoPropertyAlreadyExistsError(propertyName, errorDepth)
         end
     end
-    
+
     -- Ensure property name will not create conflicts with existing method names.
     -- Check Getter name.
     local instanceOrClass = instance or cls
@@ -799,34 +807,34 @@ local function ValidatePropertyCreation(propertyName, instance, cls, defaultValu
     if instanceOrClass[getterName] ~= nil then
         error(string.format("Cannot create property named '%s': Property getter name '%s' is already defined for this class.", propertyName, getterName), errorDepth)
     end
-    
+
     local setterName = GetSetterNameForProperty(propertyName)
     if instanceOrClass[setterName] ~= nil then
         error(string.format("Cannot create property named '%s': Property setter name '%s' is already defined for this class.", propertyName, setterName), errorDepth)
     end
-    
+
     local rawSetterName = GetRawSetterNameForProperty(propertyName)
     if instanceOrClass[rawSetterName] ~= nil then
         error(string.format("Cannot create property named '%s': Property raw setter name '%s' is already defined for this class.", propertyName, rawSetterName), errorDepth)
     end
-    
+
     -- Default value cannot be nil.
     if defaultValue == nil then
         error(string.format("No default value provided when adding property '%s'!", propertyName), errorDepth)
     end
-    
+
 end
 
 -- Search through the given GUIItemArray for a GUIItem that maps to a GUIObject with the given name.
 -- Optionally, continue searching even after we've found one to see if it is a unique object.
 local function FindObjectWithNameInGUIItemArray(array, name, checkForUnique)
-    
+
     local found = nil
     for i=0, array:GetSize() - 1 do
         local item = array:Get(i)
         local object = GetOwningGUIObject(item)
         if object and object.name == name then
-            
+
             if checkForUnique then
                 if found ~= nil then
                     return object, false
@@ -834,73 +842,73 @@ local function FindObjectWithNameInGUIItemArray(array, name, checkForUnique)
             else
                 return object
             end
-            
+
             found = object
-            
+
         end
     end
-    
+
     if checkForUnique then
         return found, true
     else
         return found
     end
-    
+
 end
 
 local doneIsaOverrides = { [GUIObject] = true }
 local function OverrideIsaForClass(cls)
-    
+
     assert(type(cls) == "table")
-    
+
     if doneIsaOverrides[cls] then
         return
     end
-    
+
     -- Get the base class of this class.
     local baseClass = GetBaseClass(cls)
     assert(baseClass)
-    
+
     -- Ensure base class has had its isa override completed.
     OverrideIsaForClass(baseClass)
-    
+
     -- Create a new isa method just for this class.
     local thisClassName = cls.classname
     cls.isa = function(self, className)
         return className == thisClassName or baseClass:isa(className)
     end
-    
+
     -- Mark this class as having done the isa override, so we don't duplicate work.
     doneIsaOverrides[cls] = true
-    
+
 end
 
 -- Calculates the number of Initialize calls expected between GUIObject and the top level class
 -- given.  Calculated by traversing path to GUIObject, incrementing count by 1 each time a unique
 -- Initialize field is encountered.
 local function GetExpectedClassInitializeDepth(cls)
-    
+
     local cachedValue = classInitDepthCache[cls]
     if cachedValue then
         return cachedValue
     end
-    
+
     local baseClass = GetBaseClass(cls)
-    
+
     if not baseClass then
         error(string.format("Expected a GUIObject-based class, got %s instead", cls), 2)
     end
-    
+
     local depth = GetExpectedClassInitializeDepth(baseClass)
-    
+
     if cls.Initialize ~= baseClass.Initialize then
         depth = depth + 1
     end
-    
+
     classInitDepthCache[cls] = depth
-    
+
     return depth
-    
+
 end
 
 
@@ -937,10 +945,10 @@ local kAlignParamValues =
 -- NOTE:  At this stage, the object does not yet have a parent.
 function GUIObject:Initialize(params, errorDepth)
     errorDepth = (errorDepth or 1) + 1
-    
+
     -- Optimize "isa()" calls by providing our own method.
     OverrideIsaForClass(_G[self.classname])
-    
+
     -- Can be provided with a set of property names that will have all Set() calls to them logged
     -- and traced.
     RequireType({"table", "nil"}, params.debugLogProperties, "params.debugLogProperties", errorDepth)
@@ -950,7 +958,7 @@ function GUIObject:Initialize(params, errorDepth)
         end
         self.debugLogProperties = params.debugLogProperties
     end
-    
+
     RequireType({"Color", "nil"}, params.color, "params.color", errorDepth)
     RequireType({"number", "nil"}, params.opacity, "params.opacity", errorDepth)
     RequireType({"string", "nil"}, params.align, "params.align", errorDepth)
@@ -964,14 +972,14 @@ function GUIObject:Initialize(params, errorDepth)
     RequireType({"Vector", "nil"}, params.hotSpot, "params.hotSpot", errorDepth)
     RequireType({"Vector", "nil"}, params.size, "params.size", errorDepth)
     RequireType({"Vector", "nil"}, params.scale, "params.scale", errorDepth)
-    
+
     -- Certain functions can only be used before a class has been instantiated.
     local cls = _G[self.classname]
     assert(cls)
     if not classInstantiated[cls] then
         classInstantiated[cls] = true
     end
-    
+
     -- Create class property instantiations for this object.
     if cls._classPropList then
         for i=1, #cls._classPropList do
@@ -981,11 +989,11 @@ function GUIObject:Initialize(params, errorDepth)
             local defaultValue = cls[GetClassPropertyFieldName(propertyName)]
             assert(defaultValue ~= nil)
             local instancePropertyFieldName = GetInstancePropertyFieldName(propertyName)
-            
+
             if noCopy then
                 -- Reference the default value in the instance property, and make note that this
                 -- property is a "no copy" property.
-                
+
                 self[instancePropertyFieldName] = defaultValue
                 self[GetInstancePropertyNoCopyFieldName(propertyName)] = true
             else
@@ -994,68 +1002,68 @@ function GUIObject:Initialize(params, errorDepth)
             end
         end
     end
-    
+
     -- Every GUIObject has a GUIItem "rootItem" -- the GUIObject's representation in the engine.
     self.rootItem = self:CreateLocatorGUIItem()
     assert(self.rootItem)
-    
+
     -- Safety check, since this is a common mistake.
     self._guiObjectInitCalled = true
-    
+
     -- Safety check, ensure that we're at the expected depth.  If we're not, this is a sign that we
     -- may have skipped some Initialize calls of some derived classes (common mistake is to forget
     -- to call wrapper Initialize methods).
     local expectedDepth = GetExpectedClassInitializeDepth(_G[self.classname])
     local startDepth = GetErrorDepthAtInitGUIObjectCall()
     local actualDepth = errorDepth - startDepth
-    
+
     if expectedDepth ~= actualDepth then
         error(string.format("Number of Initialize calls between %s:Initialize() and GUIObject:Initialize() didn't match expected value!  This can be caused by: 1) Not incrementing errorDepth by 1 for each Initialize call, or 2) Not calling Initialize of some intermediate class (eg wrappers).", self.classname), errorDepth)
     end
-    
+
     if params.color then
         self:SetColor(params.color)
     end
-    
+
     if params.opacity then
         self:SetOpacity(params.opacity)
     end
-    
+
     if params.hotSpot then
         self:SetHotSpot(params.hotSpot)
     end
-    
+
     if params.anchor then
         self:SetAnchor(params.anchor)
     end
-    
+
     if params.align then
         local methodName = kAlignParamValues[params.align]
         local method = self[methodName]
         assert(method)
         method(self)
     end
-    
+
     if params.position then
         self:SetPosition(params.position)
     end
-    
+
     if params.angle then
         self:SetAngle(params.angle)
     end
-    
+
     if params.rotationOffset then
         self:SetRotationOffset(params.rotationOffset)
     end
-    
+
     if params.size then
         self:SetSize(params.size)
     end
-    
+
     if params.scale then
         self:SetScale(params.scale)
     end
-    
+
 end
 
 -- Sets up the composite class property "On_____Changed" event forwarding, if necessary.
@@ -1069,67 +1077,67 @@ end
 -- raises an error if member object is non-nil and the wrong type.
 local function ForwardEventForCompositeClassPropertyChangeEvent(self, propertyNameThisObject, errorDepth)
     errorDepth = (errorDepth or 1) + 1
-    
+
     -- Should be completed with initialization, not after.
     assert(self:GetIsInitializing())
-    
+
     local memberObjectName = self[GetCompositeClassPropertyFieldName(propertyNameThisObject)]
     assert(memberObjectName)
-    
+
     local memberThing = self[memberObjectName]
     if memberThing == nil then
         return false -- member object doesn't exist yet.
     end
-    
+
     -- GUIItems cannot fire events.
     if memberThing:isa("GUIItem") then
         return true
     end
-    
+
     if not memberThing:isa("GUIObject") then
         error(string.format("Class '%s' declared a composite property referencing a member GUIObject or GUIItem named '%s', but got a %s-type under that name instead!", self.classname, memberObjectName, GetTypeName(memberThing)), errorDepth)
     end
-    
+
     local propertyNameOtherObject = self[GetCompositeClassPropertyOtherName(propertyNameThisObject)] or propertyNameThisObject
-    
+
     local theirEventName = GetChangedEventNameForProperty(propertyNameOtherObject)
     local ourEventName = GetChangedEventNameForProperty(propertyNameThisObject)
-    
+
     -- Determine if this event forwarding is already setup.
     if self.hooks then
         for i=1, #self.hooks do
             local hook = self.hooks[i]
             if hook.sender == memberThing and
-               hook.receiver == self and
-               hook.eventName == ourEventName and
-               hook.forwardedEventName == theirEventName then
-            
+                    hook.receiver == self and
+                    hook.eventName == ourEventName and
+                    hook.forwardedEventName == theirEventName then
+
                 return true
             end
         end
     end
-    
+
     -- If we didn't find an existing callback, hook it up now.
     local callback = self:ForwardEvent(memberThing, theirEventName, ourEventName)
-    
+
     -- Attach the forwarded event name so we can access it later.  Otherwise, it would only exist
     -- inside the function, and it's not easy/performant to dig around inside its upvalues...
     callback.forwardedEventName = theirEventName
-    
+
     return true
-    
+
 end
 
 -- Called after the GUIObject and all of its children have been created.
 -- NOTE:  At this stage, the object does not yet have a parent.
 function GUIObject:_PostInit(params, errorDepth)
     errorDepth = (errorDepth or 1) + 1
-    
+
     -- Create all the composite property event forwards.
     if self._classCompositePropList then
         for i=1, #self._classCompositePropList do
             local propertyNameThisObject = self._classCompositePropList[i]
-            
+
             local result = ForwardEventForCompositeClassPropertyChangeEvent(self, propertyNameThisObject, errorDepth)
             if result == nil then
                 local memberObjectName = self[GetCompositeClassPropertyFieldName(propertyNameThisObject)]
@@ -1137,14 +1145,14 @@ function GUIObject:_PostInit(params, errorDepth)
             end
         end
     end
-    
+
     -- Mark this as done initializing.
     self._initialized = true
-    
+
 end
 
 local function GetGUIItemChildren(item)
-    
+
     item:GetChildren(guiItemArray)
     local result = GUIItemArrayToTable(guiItemArray)
     return result
@@ -1155,11 +1163,11 @@ end
 -- to this object to the list, and terminating the search when an item is reached that does not
 -- belong to this object.
 local function GetOwnedGUIItemsHelper(guiObject, list, parentItem)
-    
+
     assert(parentItem)
-    
+
     local children = GetGUIItemChildren(parentItem)
-    
+
     for i=1, #children do
         local owner = GetOwningGUIObject(children[i])
         if owner == guiObject then
@@ -1167,22 +1175,22 @@ local function GetOwnedGUIItemsHelper(guiObject, list, parentItem)
             GetOwnedGUIItemsHelper(guiObject, list, children[i])
         end
     end
-    
+
 end
 
 local function GetOwnedGUIItems(guiObject)
-    
+
     local list = { guiObject:GetRootItem() }
     GetOwnedGUIItemsHelper(guiObject, list, guiObject:GetRootItem())
-    
+
     return list
-    
+
 end
 
 local function GetChildGUIObjects(guiObject, ownedGUIItems)
-    
+
     local childObjs = {}
-    
+
     for i=1, #ownedGUIItems do
         local children = GetGUIItemChildren(ownedGUIItems[i])
         for j=1, #children do
@@ -1192,24 +1200,24 @@ local function GetChildGUIObjects(guiObject, ownedGUIItems)
             end
         end
     end
-    
+
     return childObjs
-    
+
 end
 
 local function DestroyGUIItemActual(guiItem)
-    
+
     assert(guiItemToGUIObjectMapping[guiItem] == nil)
     GUI.DestroyItem(guiItem)
-    
+
 end
 
 -- Called at the end of the frame, after everything else that could possibly want anything to do
 -- with this object has made their peace.
 local function FinishDestruction(self)
-    
+
     self.destroyed = true
-    
+
     -- Destroy all the GUIItems that this object owns.  This is as simple as destroying the
     -- rootItem.  The engine destroys all child GUIItems when a GUIItem is destroyed, but first, we
     -- need to release our ownership of all these items.  Use the lists we gathered earlier.
@@ -1218,24 +1226,24 @@ local function FinishDestruction(self)
         guiItemToGUIObjectMapping[self._ownedGUIItems[i]] = nil
     end
     self._ownedGUIItems = nil
-    
+
     guiItemToGUIObjectMapping[self.rootItem] = nil
     DestroyGUIItemActual(self.rootItem)
     self.rootItem = nil
-    
+
 end
 
 -- Destroys this GUIObject as well as all of its children.
 function GUIObject:Destroy()
-    
+
     AssertIsNotDestroyed(self) -- GUIObject cannot be destroyed more than once.
     assert(self._preDestroy == nil)
     self._preDestroy = true
-    
+
     -- Derived classes should extend Uninitialize to perform clean up.  This is performed _BEFORE_
     -- children are destroyed.
     self:Uninitialize()
-    
+
     -- We need to destroy GUIObjects in a depth-first order.  In order to do this, we need to build
     -- a list of direct child GUIObjects for this object (that is, objects whose rootItems are
     -- descendants of this object's rootItem).  It's not as simple as just checking every child's
@@ -1243,7 +1251,7 @@ function GUIObject:Destroy()
     local ownedGUIItems = GetOwnedGUIItems(self)
     self._ownedGUIItems = ownedGUIItems
     local childObjs = GetChildGUIObjects(self, ownedGUIItems)
-    
+
     -- Disable all interactions for these items.
     for i=1, #ownedGUIItems do
         local item = ownedGUIItems[i]
@@ -1251,7 +1259,7 @@ function GUIObject:Destroy()
             item:ClearOptionFlag(GUIItem["Interaction_"..tostring(j)])
         end
     end
-    
+
     -- Now we have a list of direct descendant GUIObjects.  We will recurse into this list to
     -- destroy GUIObjects in a depth-first order, but there's a problem.  It's totally possible for
     -- a child object's destruction to cause one of its siblings to be destroyed as well, thus
@@ -1270,41 +1278,41 @@ function GUIObject:Destroy()
         end
         assert(false) -- a child object MUST have been destroyed and removed from the list.
     end
-    
+
     for i=1, #childObjs do
         self:HookEvent(childObjs[i], "OnDestroy", OnChildObjectDestroyed)
     end
-    
+
     -- Recursively destroy children.
     while #childObjs > 0 do
         childObjs[#childObjs]:Destroy()
     end
-    
+
     -- Orphan this object (remove its parent).  This will also trigger any "OnChildRemoved" events
     -- to fire.
     self:SetParent(nil)
-    
+
     -- Object (should) no longer have any ties to any children or parents.  Safe to destroy now.
     self:FireEvent("OnDestroy", self)
-    
+
     -- Inform the managers just before we destroy this object.
     OnGUIObjectDestroyed(self)
-    
+
     -- Make this object stop listening for events for all other objects.
     self:UnHookAllEvents()
-    
+
     -- Make all listeners of this object stop listening.
     self:RemoveAllListeners()
-    
+
     assert(self.hooks == nil)
     assert(self.callbacks == nil)
-    
+
     -- Ensure object is not modal.
     self:ClearModal()
-    
+
     -- Defer actual destruction to the end of the frame.
     self:EnqueueDeferredUniqueCallback(FinishDestruction)
-    
+
 end
 
 -- Derived classes should extend Uninitialize to perform clean up.
@@ -1323,21 +1331,21 @@ function GUIObject:CreateGUIItem(optionalParentItem)
     local newItem = GUI.CreateItem()
     newItem:SetOptionFlag(GUIItem.CorrectScaling)
     newItem:SetOptionFlag(GUIItem.CorrectRotationOffset)
-    
+
     if optionalParentItem then
         optionalParentItem:AddChild(newItem)
     else
         local parentItem = self:GetChildHoldingItem()
-        
+
         -- This might BE the root item we're creating now... a bit of a wrinkle, but not too bad.
         if parentItem then
             parentItem:AddChild(newItem)
         end
     end
-    
+
     -- Keep track of which items belong to which objects.
     guiItemToGUIObjectMapping[newItem] = self
-    
+
     return newItem
 end
 
@@ -1360,43 +1368,43 @@ function GUIObject:CreateLocatorGUIItem(optionalParentItem)
 end
 
 function GUIObject:DestroyGUIItem(guiItem)
-    
+
     AssertIsaGUIItem(guiItem)
-    
+
     local owningObject = GetOwningGUIObject(guiItem)
     if owningObject == nil then
         error("Attempted to destroy a GUIItem with GUIObject.DestroyGUIItem that was not created by this GUI system!", 2)
     elseif owningObject ~= self then
         error("GUIObject attempted to destroy a GUIItem it does not own!", 2)
     end
-    
+
     guiItemToGUIObjectMapping[guiItem] = nil
-    
+
     DestroyGUIItemActual(guiItem)
-    
+
 end
 
 Event.Hook("NotifyGUIItemDestroyed", function(destroyedItem)
-    
+
     -- See if our new gui system owned this item.
     local owningObject = GetOwningGUIObject(destroyedItem)
     if not owningObject then
         return
     end
-    
+
     -- GUIObject:DestroyGUIItem() will remove its reference to the item in the system.  If we made
     -- it this far, it means the item still belongs to the system, and that it was destroyed from
     -- outside the system.
     error("GUIItem belonging to this system was destroyed by a call from outside the system!  (ALL GUIItem handling for this system MUST be performed using a corresponding GUIObject method).")
-    
+
 end)
 
 function GUIObject:GetIsDescendantOf(ancestorObj)
-    
+
     PROFILE("GUIObject:GetIsDescendantOf")
-    
+
     RequireIsa("GUIObject", ancestorObj, "ancestorObj")
-    
+
     local currentObj = self
     while currentObj do
         local parent = currentObj:GetParent()
@@ -1405,18 +1413,18 @@ function GUIObject:GetIsDescendantOf(ancestorObj)
         end
         currentObj = parent
     end
-    
+
     return false
-    
+
 end
 
 function GUIObject:GetIsAncestorOf(descendantObj)
-    
+
     PROFILE("GUIObject:GetIsAncestorOf")
-    
+
     local result = descendantObj:GetIsDescendantOf(self)
     return result
-    
+
 end
 
 function GUIObject:GetName()
@@ -1428,12 +1436,12 @@ end
 -- normalized coordinates (hot spot) to optionalHotSpotX, and optionalHotSpotY parameters.  Also
 -- accepts a Vector object as the first parameter.
 function GUIObject:GetScreenPosition(optionalHotSpotX, optionalHotSpotY)
-    
+
     local hotspot
     if optionalHotSpotX ~= nil then
         hotspot = ProcessVectorInput(optionalHotSpotX, optionalHotSpotY)
     end
-    
+
     -- Temporarily un-adjust the GUIItem's position and size to make the engine calculate this for
     -- us.  Move it back when we're done just before returning.  We include size because a hotspot
     -- might have been included.
@@ -1441,53 +1449,53 @@ function GUIObject:GetScreenPosition(optionalHotSpotX, optionalHotSpotY)
     local newPos = self:GetPosition()
     local oldSize = self:GetRootItem():GetSize()
     local newSize = self:GetSize()
-    
+
     self:GetRootItem():SetPosition(newPos)
     self:GetRootItem():SetSize(newSize)
     local screenPos = self:GetRootItem():GetScreenPosition(nil, nil, hotspot)
     self:GetRootItem():SetPosition(oldPos)
     self:GetRootItem():SetSize(oldSize)
-    
+
     return screenPos
-    
+
 end
 
 function GUIObject:ScreenSpaceToLocalSpace(p1, p2)
-    
+
     local ssPt = ProcessVectorInput(p1, p2)
     local screenPos = self:GetScreenPosition()
     local scale = self:GetAbsoluteScale()
-    
+
     return (ssPt - screenPos) / scale
-    
+
 end
 
 function GUIObject:ScreenSpaceToLocalSpaceStatic(p1, p2)
-    
+
     local ssPt = ProcessVectorInput(p1, p2)
     local screenPos = GetStaticScreenPosition(self)
     local scale = GetStaticAbsoluteScale(self)
-    
+
     return (ssPt - screenPos) / scale
-    
+
 end
 
 function GUIObject:LocalSpaceToScreenSpace(p1, p2)
-    
+
     local osPt = ProcessVectorInput(p1, p2)
     local screenPos = self:GetScreenPosition()
     local scale = self:GetAbsoluteScale()
-    
+
     return osPt * scale + screenPos
-    
+
 end
 
 function GUIObject:LocalSpaceToScreenSpaceStatic(p1, p2)
-    
+
     local osPt = ProcessVectorInput(p1, p2)
     local screenPos = GetStaticScreenPosition(self)
     local scale = GetStaticAbsoluteScale(self)
-    
+
     return osPt * scale + screenPos
 
 end
@@ -1519,7 +1527,7 @@ end
 -- take extra parameters when adding children (eg GUIFillLayout takes a weight).  These are passed
 -- along when the OnChildAdded event is fired.
 function GUIObject:SetParent(parentObjOrItemOrNil, params)
-    
+
     local parentItem
     if GetIsaGUIObject(parentObjOrItemOrNil) then
         parentItem = parentObjOrItemOrNil:GetRootItem()
@@ -1528,16 +1536,16 @@ function GUIObject:SetParent(parentObjOrItemOrNil, params)
     elseif parentObjOrItemOrNil ~= nil then
         error(string.format("Expected a GUIItem or GUIObject, got %s-type instead.", GetTypeName(parentObjOrItemOrNil)), 2)
     end
-    
+
     -- Notify old parent we are removing ourselves.
     local oldParentObject = self:GetParent()
     local oldParentItem = oldParentObject and oldParentObject:GetChildHoldingItem()
-    
+
     -- If the parent is the same, bail out now.
     if oldParentItem == parentItem then
         return
     end
-    
+
     -- Set this object's root item's parent to the parent item.
     if parentItem == nil then
         assert(oldParentItem ~= nil) -- otherwise we'd have bailed out above...
@@ -1545,28 +1553,28 @@ function GUIObject:SetParent(parentObjOrItemOrNil, params)
     else
         parentItem:AddChild(self:GetRootItem())
     end
-    
+
     if oldParentObject then
         oldParentObject:FireEvent("OnChildRemoved", self:GetRootItem())
     end
-    
+
     local newParentObject = parentItem and GetOwningGUIObject(parentItem)
     if newParentObject then
         newParentObject:FireEvent("OnChildAdded", self:GetRootItem(), params)
     end
-    
+
     self:FireEvent("OnParentChanged", newParentObject, oldParentObject)
-    
+
 end
 
 -- Get the parent GUIObject (based on root item hierarchy).
 function GUIObject:GetParent(suppressInitWarning)
-    
+
     if not self._initialized and not suppressInitWarning then
         Log("WARNING!  New object called GetParent() before initialization was completed.  This will always return nil!")
         Log("%s", debug.traceback())
     end
-    
+
     local rootItem = self:GetRootItem()
     assert(rootItem)
     local parentItem = rootItem:GetParent()
@@ -1588,11 +1596,11 @@ end
 -- GUIObject (guaranteed to not happen in pure "new" system... but any items created by the old
 -- system will not have any GUIObjects associated with them).
 function GetOwningGUIObject(item)
-    
+
     AssertIsaGUIItem(item)
-    
+
     return guiItemToGUIObjectMapping[item]
-    
+
 end
 
 -- Create pass-through methods for GUIItem methods that are not represented as fake properties for
@@ -1619,10 +1627,10 @@ do
     }
     for i=1, #passThroughMethods do
         GUIObject[ passThroughMethods[i] ] =
-            function(self, p1, p2, p3, p4, p5)
-                local result = GUIItem[ passThroughMethods[i] ](self:GetRootItem(), p1, p2, p3, p4, p5)
-                return result
-            end
+        function(self, p1, p2, p3, p4, p5)
+            local result = GUIItem[ passThroughMethods[i] ](self:GetRootItem(), p1, p2, p3, p4, p5)
+            return result
+        end
     end
 end
 
@@ -1655,6 +1663,11 @@ function GUIObject:OnMouseClick(double)
     self:FireEvent("OnMouseClick", double)
 end
 
+-- Called when the right mouse button is clicked _DOWN_ onto this object.
+function GUIObject:OnMouseRightClick()
+    self:FireEvent("OnMouseRightClick")
+end
+
 -- Return whether or not this item can be double-clicked.  If true, this means a click within
 -- a certain time of a previous click will be considered a double click when over this object, and
 -- the call to OnMouseClick() for this object will have the "double" parameter set to true.
@@ -1675,10 +1688,25 @@ function GUIObject:OnMouseDrag()
     self:FireEvent("OnMouseDrag")
 end
 
+-- Called every single frame that the mouse is right-clicked down for the object that it was
+-- originally clicked down on (regardless of whether or not the cursor is _still_ over the object).
+-- This is called every frame instead of just the frames where the mouse has moved, since sometimes
+-- it is necessary when more than just the mouse can move (for example, if a slider object moves
+-- while the mouse is interacting with it).
+function GUIObject:OnMouseRightDrag()
+    self:FireEvent("OnMouseRightDrag")
+end
+
 -- Called when the left mouse button is released over this object, after having previously been
 -- clicked down onto this object.
 function GUIObject:OnMouseRelease()
     self:FireEvent("OnMouseRelease")
+end
+
+-- Called when the right mouse button is released over this object, after having previously been
+-- clicked down onto this object.
+function GUIObject:OnMouseRightRelease()
+    self:FireEvent("OnMouseRightRelease")
 end
 
 -- Called when the left mouse button is released elsewhere, not over this object, after having
@@ -1687,10 +1715,22 @@ function GUIObject:OnMouseCancel()
     self:FireEvent("OnMouseCancel")
 end
 
+-- Called when the right mouse button is released elsewhere, not over this object, after having
+-- previously been clicked down on this object.
+function GUIObject:OnMouseRightCancel()
+    self:FireEvent("OnMouseRightCancel")
+end
+
 -- Called when the left mouse button is released, regardless of location, after having previously
 -- been clicked down on this object.  Called after OnMouseCancel() or OnMouseRelease().
 function GUIObject:OnMouseUp()
     self:FireEvent("OnMouseUp")
+end
+
+-- Called when the right mouse button is released, regardless of location, after having previously
+-- been clicked down on this object.  Called after OnMouseRightCancel() or OnMouseRightRelease().
+function GUIObject:OnMouseRightUp()
+    self:FireEvent("OnMouseRightUp")
 end
 
 -- Called when the mouse wheel is rolled with the cursor hovering over this object. If this
@@ -1720,6 +1760,11 @@ end
 -- Called when this object is modal and the mouse is clicked down outside of the object.
 function GUIObject:OnOutsideClick()
     self:FireEvent("OnOutsideClick")
+end
+
+-- Called when this object is modal and the mouse is right-clicked down outside of the object.
+function GUIObject:OnOutsideRightClick()
+    self:FireEvent("OnOutsideRightClick")
 end
 
 -- Called when this object is modal and the mouse wheel is rolled outside of the object.
@@ -1776,7 +1821,7 @@ end
 -- wheel events.  This item, however, will still receive events -- although it is not required to
 -- in order to block.
 function GUIObject:BlockChildInteractions(optionalItem)
-    
+
     local item
     if optionalItem == nil then
         item = self:GetRootItem()
@@ -1785,15 +1830,15 @@ function GUIObject:BlockChildInteractions(optionalItem)
     else
         error(string.format("Expected a GUIItem, or nil (to reference self), got %s-type instead!", GetTypeName(optionalItem)), 2)
     end
-    
+
     GetGUIInteractionManager():BlockChildInteractions(item)
-    
+
 end
 
 --- This GUIObject or GUIItem will no longer block interactions with its children.
 ---@param optionalItem GUIItem | GUIObject | nil
 function GUIObject:AllowChildInteractions(optionalItem)
-    
+
     local item
     if optionalItem == nil then
         item = self:GetRootItem()
@@ -1802,9 +1847,9 @@ function GUIObject:AllowChildInteractions(optionalItem)
     else
         error(string.format("Expected a GUIItem, or nil (to reference self), got %s-type instead!", GetTypeName(optionalItem)), 2)
     end
-    
+
     GetGUIInteractionManager():AllowChildInteractions(item)
-    
+
 end
 
 -- This object will stop receiving cursor-related interactions from the given GUIItem.
@@ -1847,36 +1892,36 @@ end
 -- SetModal, the last will receive events exclusively, and the former will only receive events once
 -- the latter's ClearModal() is called.  It functions like a stack.
 function GUIObject:SetModal()
-    
+
     AssertIsNotDestroyed(self)
-    
+
     if self.modal then
         return -- already modal.
     end
-    
+
     self.modal = true
-    
+
     GetGUIInteractionManager():AddGUIObjectToModalObjectStack(self)
     if self.altModalObj then
         self.altModalObj:SetModal()
     end
-    
+
 end
 
 -- This object will stop receiving events exclusively.
 function GUIObject:ClearModal()
-    
+
     if not self.modal then
         return -- already not modal.
     end
-    
+
     self.modal = nil
-    
+
     if self.altModalObj then
         self.altModalObj:ClearModal()
     end
     GetGUIInteractionManager():RemoveGUIObjectFromModalObjectStack(self)
-    
+
 end
 
 -- Sets the GUIObject that will be used for subsequent calls to SetModal() from this object.  This
@@ -1912,38 +1957,38 @@ end
 -- Prevents OnMouseRelease from being called if the event manager considers this to be the
 -- currently "clicked down on" object, otherwise it does nothing.
 function GUIObject:CancelPendingMouseRelease()
-    
+
     local targetObj = self:GetModalObject()
     GetGUIInteractionManager():CancelPendingMouseRelease(targetObj)
-    
+
 end
 
 local function FireEventActual(self, managerFunc, eventName, p1, p2, p3, p4, p5, p6, p7, p8)
-    
+
     AssertIsNotDestroyed(self)
-    
+
     if not self.callbacks then
         return -- nothing is listening to this object.
     end
-    
+
     -- Don't immediately fire events as we iterate; queue them up instead.  It is entirely possible
     -- for a receiver to be removed as a result of an event call, and that would mess up iteration.
     for i=1, #self.callbacks do
-        
+
         local callback = self.callbacks[i]
-        
+
         -- Only add callbacks that are applicable here.
         if callback.eventName == eventName then
             managerFunc(GetGUIEventManager(), callback, p1, p2, p3, p4, p5, p6, p7, p8)
         end
-        
+
     end
-    
+
     -- Process all queued events (unless this object has temporarily paused event processing).
     if not self.eventsPaused then
         GetGUIEventManager():ProcessEventQueue()
     end
-    
+
 end
 
 -- Fires an event off to all of the listeners of the given eventName listening to this object.
@@ -1963,25 +2008,25 @@ end
 -- have fired.  The parameter passed to the callback function when it fires is this object, as it
 -- is assumed the callback function is a method of this object.
 function GUIObject:EnqueueDeferredUniqueCallback(callbackFunction)
-    
+
     local callback =
     {
         param = self,
         callbackFunction = callbackFunction,
     }
     GetGUIDeferredUniqueCallbackManager():EnqueueDeferredUniqueCallback(callback)
-    
+
 end
 
 -- Prints debug information about each callback for the given event.  Used to get a list of all the
 -- functions that get called when an event fires, for debugging.
 function GUIObject:Debug_DumpCallbackInfo(eventName)
-    
+
     Log("Debug_DumpCallbackInfo()")
     Log("    self = %s", Debug_GetBKAForItem(self:GetRootItem()))
     Log("    eventName = %s", eventName)
     Log("    #self.callbacks = %s", #self.callbacks)
-    
+
     local callbackCount = 0
     for i=1, #self.callbacks do
         local callback = self.callbacks[i]
@@ -1989,9 +2034,9 @@ function GUIObject:Debug_DumpCallbackInfo(eventName)
             callbackCount = callbackCount + 1
         end
     end
-    
+
     Log("    applicable callback count = %s", callbackCount)
-    
+
     for i=1, #self.callbacks do
         local callback = self.callbacks[i]
         if callback.eventName == eventName then
@@ -2001,10 +2046,10 @@ function GUIObject:Debug_DumpCallbackInfo(eventName)
             Log("        eventName = %s", callback.eventName)
             local callbackFunction = callback.callbackFunction
             Log("        callbackFunction = %s", DebugFunctionToString(callbackFunction))
-            
+
         end
     end
-    
+
 end
 
 -- This object will continue to queue up events to fire, but will not actually fire them.  Event
@@ -2015,28 +2060,28 @@ end
 -- within a single function call (eg to ensure that related state is in sync before callbacks are
 -- fired).
 function GUIObject:PauseEvents()
-    
+
     AssertIsNotDestroyed(self)
-    
+
     self.eventsPaused = (self.eventsPaused or 0) + 1
-    
+
 end
 
 function GUIObject:ResumeEvents()
-    
+
     AssertIsNotDestroyed(self)
-    
+
     assert(self.eventsPaused ~= nil)
     assert(self.eventsPaused > 0)
-    
+
     self.eventsPaused = self.eventsPaused - 1
     if self.eventsPaused == 0 then
         self.eventsPaused = nil
     end
-    
+
     -- Process all queued events.
     GetGUIEventManager():ProcessEventQueue()
-    
+
 end
 
 -- Returns true if the object is still being initialized, false if _PostInit has finished running.
@@ -2047,9 +2092,9 @@ end
 
 -- Returns the property name if true, otherwise returns nil.
 local function GetEventNameFromCompositeClassPropertyChangedEvent(self, eventName)
-    
+
     PROFILE("GUIObject GetEventNameFromCompositeClassPropertyChangedEvent")
-    
+
     -- Find the one with the On_____Changed event that matches this one.  This could be optimized
     -- by pre-computing the list of event names for each class when the composite class properties
     -- are declared... but let's see if we can get away without doing this.
@@ -2062,9 +2107,9 @@ local function GetEventNameFromCompositeClassPropertyChangedEvent(self, eventNam
             end
         end
     end
-    
+
     return nil
-    
+
 end
 
 -- Sets up a callback for when the sender GUIObject fires an event called eventName.
@@ -2073,54 +2118,54 @@ end
 -- The parameter "self" is the receiver of the event (the one calling HookEvent here).
 -- The "param" parameters are optional.
 function GUIObject:HookEvent(sender, eventName, callbackFunction)
-    
+
     AssertIsNotDestroyed(self)
-    
+
     -- Validate input
     AssertIsaGUIObject(sender)
-    
+
     if type(eventName) ~= "string" then
         error(string.format("Expected a string for eventName, got %s-type instead.", GetTypeName(eventName)), 2)
     end
-    
+
     if type(callbackFunction) ~= "function" then
         error(string.format("Expected a function for callbackFunction, got %s-type instead.", GetTypeName(callbackFunction)), 2)
     end
-    
+
     -- If this class is still being initialized, check and see if this event hook is for a
     -- composite class property's On_____Changed event -- which won't have been hooked up yet -- 
     -- and see if we can hook it up now, early.
     if self:GetIsInitializing() and not self._forwardingEvent then
-        
+
         local propertyName = GetEventNameFromCompositeClassPropertyChangedEvent(self, eventName)
         if propertyName then -- nil if not from a composite class property
             ForwardEventForCompositeClassPropertyChangeEvent(self, propertyName)
         end
-        
+
     end
-    
+
     -- Create a new callback.
     local newCallback = {}
     newCallback.sender = sender
     newCallback.receiver = self
     newCallback.eventName = eventName
     newCallback.callbackFunction = callbackFunction
-    
+
     -- Only create the hooks table for objects that actually have hooks -- most won't.
     if not self.hooks then
         self.hooks = {}
     end
     table.insert(self.hooks, newCallback)
-    
+
     -- Sender object also keeps a record of their listeners.
     if not sender.callbacks then
         sender.callbacks = {}
     end
-    
+
     table.insert(sender.callbacks, newCallback)
-    
+
     return newCallback
-    
+
 end
 
 -- Sets up automatic forwarding of the given event from the sender.  Simply calls HookEvent() for
@@ -2131,16 +2176,16 @@ end
 -- events.
 function GUIObject:ForwardEvent(sender, eventName, alternateEventName)
     local eventNameToReceiver = alternateEventName or eventName
-    
+
     self._forwardingEvent = true
     local result = self:HookEvent(sender, eventName,
-        function(self, p1, p2, p3, p4, p5, p6, p7, p8)
-            self:FireEvent(eventNameToReceiver, p1, p2, p3, p4, p5, p6, p7, p8)
-        end)
+            function(self, p1, p2, p3, p4, p5, p6, p7, p8)
+                self:FireEvent(eventNameToReceiver, p1, p2, p3, p4, p5, p6, p7, p8)
+            end)
     self._forwardingEvent = nil
-    
+
     return result
-    
+
 end
 
 -- Stops listening to all events with the given name.  Returns false if it had no effect.
@@ -2186,10 +2231,10 @@ end
 
 -- Performs the actual un-hooking of events.
 local function RemoveCallback(callback, receiverIdx, senderIdx)
-    
+
     local sender = callback.sender
     local receiver = callback.receiver
-    
+
     -- Pass receiver index if we have it, so we don't have to iterate over them redundantly.
     if receiverIdx == nil then
         for i=1, #receiver.hooks do
@@ -2200,7 +2245,7 @@ local function RemoveCallback(callback, receiverIdx, senderIdx)
         end
     end
     assert(receiver.hooks[receiverIdx] == callback)
-    
+
     -- Pass sender index if we have it, so we don't have to iterate over them redundantly.
     if senderIdx == nil then
         for i=1, #sender.callbacks do
@@ -2211,27 +2256,27 @@ local function RemoveCallback(callback, receiverIdx, senderIdx)
         end
     end
     assert(sender.callbacks[senderIdx] == callback)
-    
+
     -- Remove callback from sender's list.
     table.remove(sender.callbacks, senderIdx)
-    
+
     -- Remove callback from receiver's list.
     table.remove(receiver.hooks, receiverIdx)
-    
+
     -- Cleanup sender's table, if possible.
     if #sender.callbacks == 0 then
         sender.callbacks = nil
     end
-    
+
     -- Cleanup receiver's table, if possible.
     if #receiver.hooks == 0 then
         receiver.hooks = nil
     end
-    
+
     -- Inform the event manager that a callback has been deleted (so it can be removed from the
     -- queue).
     GetGUIEventManager():OnCallbackRemoved(callback)
-    
+
 end
 
 -- Stop listening to events from sender with the name eventName and using the callbackFunction
@@ -2239,59 +2284,59 @@ end
 -- Therefore, passing nil for all parameters removes all hooks, for example.  Returns false if it
 -- had no effect.
 function GUIObject:UnHookEvent(sender, eventName, callbackFunction)
-    
+
     if eventName ~= nil then
         assert(type(eventName) == "string")
     end
-    
+
     if sender ~= nil then
         AssertIsaGUIObject(sender)
     end
-    
+
     if callbackFunction ~= nil then
         assert(type(callbackFunction) == "function")
     end
-    
+
     if not self.hooks then
         return false -- no hooks.
     end
-    
+
     -- Iterate over all hooks, removing those that fit the criteria provided.
     local found = false
     for i=#self.hooks, 1, -1 do
-        
+
         local callback = self.hooks[i]
-        
+
         if (eventName == nil or eventName == callback.eventName) and
-           (sender == nil or sender == callback.sender) and
-           (callbackFunction == nil or callbackFunction == callback.callbackFunction) then
-            
+                (sender == nil or sender == callback.sender) and
+                (callbackFunction == nil or callbackFunction == callback.callbackFunction) then
+
             RemoveCallback(callback, i)
             found = true
-            
+
         end
-        
+
     end
-    
+
     return found
-    
+
 end
 
 -- Removes all listeners from this object.  Returns false if it had no effect.
 function GUIObject:RemoveAllListeners()
-    
+
     if not self.callbacks then
         return false
     end
-    
+
     local found = false
     for i=#self.callbacks, 1, -1 do
         RemoveCallback(self.callbacks[i], nil, i)
         found = true
     end
-    
+
     return found
-    
+
 end
 
 -- Creates a timed callback that will call the given callbackFunction after delay seconds.  If
@@ -2309,7 +2354,7 @@ function GUIObject:RemoveTimedCallback(callback)
 end
 
 function GUIObject:TrackRenderStatus(objOrItem)
-    
+
     local item
     if objOrItem == nil then
         item = self:GetRootItem()
@@ -2319,10 +2364,10 @@ function GUIObject:TrackRenderStatus(objOrItem)
         AssertIsaGUIItem(objOrItem)
         item = objOrItem
     end
-    
+
     local result = GetGUIRenderedStatusManager():TrackRenderStatusOfObject(self, item)
     return result
-    
+
 end
 
 function GUIObject:StopTrackingRenderStatus()
@@ -2331,55 +2376,55 @@ function GUIObject:StopTrackingRenderStatus()
 end
 
 function GUIObject:SetUpdates(state)
-    
+
     if state then
         GetGUIUpdateManager():AddObjectToUpdateSet(self)
     else
         GetGUIUpdateManager():RemoveObjectFromUpdateSet(self)
     end
-    
+
 end
 
 local function StopSyncingSizeToParent(self, parentObj)
-    
+
     RequireIsa("GUIObject", parentObj, "parentObj", 2)
-    
+
     self:UnHookEvent(parentObj, "OnSizeChanged", self.SetSize)
-    
+
 end
 
 local function BeginSyncingSizeToParent(self, parentObj)
-    
+
     RequireIsa("GUIObject", parentObj, "parentObj", 2)
-    
+
     -- Attempt to remove existing hook, just in case to avoid duplicates.
     StopSyncingSizeToParent(self, parentObj)
-    
+
     -- Set this object's size to the parent's size whenever the parent's size changes.
     self:HookEvent(parentObj, "OnSizeChanged", self.SetSize)
-    
+
     -- Set this object's size to the parent's size right now.
     self:SetSize(parentObj:GetSize())
-    
+
 end
 
 local function OnParentChangedForSizeSync(self, newParentObj, oldParentObj)
-    
+
     if oldParentObj then
         StopSyncingSizeToParent(self, oldParentObj)
     end
-    
+
     if newParentObj then
         BeginSyncingSizeToParent(self, newParentObj)
     end
-    
+
 end
 
 local function TearDownParentSizeSync(self)
-    
+
     -- Stop listening for parent changes.
     self:UnHookEvent(self, "OnParentChanged", OnParentChangedForSizeSync)
-    
+
     -- Un-hook from current parent, if necessary.
     local parentObj = self:GetParent(true)
     if parentObj then
@@ -2389,13 +2434,13 @@ local function TearDownParentSizeSync(self)
 end
 
 local function SetupParentSizeSync(self)
-    
+
     -- Just in case.
     TearDownParentSizeSync(self)
-    
+
     -- Listen for parent changes.
     self:HookEvent(self, "OnParentChanged", OnParentChangedForSizeSync)
-    
+
     -- Hook into current parent, if necessary.
     local parentObj = self:GetParent(true)
     if parentObj then
@@ -2408,16 +2453,16 @@ end
 -- even during Initialize() when it doesn't yet have a parent object.  If the parent object changes,
 -- it will be synchronized to the new parent.
 function GUIObject:SetSyncToParentSize(state)
-    
+
     RequireType("boolean", state, "state", 2)
-    
+
     -- Equate nil with false
     if (self._syncdToParent == true) == state then
         return -- already set to this state.
     end
-    
+
     self._syncdToParent = state
-    
+
     if self._syncdToParent then
         -- Just enabled syncing, sync with parent if we have one.
         SetupParentSizeSync(self)
@@ -2425,7 +2470,7 @@ function GUIObject:SetSyncToParentSize(state)
         -- Just disabled syncing.  Stop syncing with parent if we have one.
         TearDownParentSizeSync(self)
     end
-    
+
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -2437,34 +2482,34 @@ end
 -- be found, a new one is generated.
 local autoGeneratedSetters = {}
 function GUIObject.GetAutoGeneratedSetter(propertyName, propertyType, itemName, altPropertyName)
-    
+
     assert(type(propertyType) == "string")
-    
+
     itemName = itemName or "rootItem"
     altPropertyName = altPropertyName or propertyName
     local key = propertyName.."_of_"..itemName.."_using_"..altPropertyName
-    
+
     if not autoGeneratedSetters[key] then
-        
+
         local newSetter
         local isFake = GetIsaFakeProperty(altPropertyName)
         local propertySetterFuncActual = isFake and GetFakePropertySetter(itemName) or InstancePropertySetter
-        
+
         if propertyType == "Vector" then
-            
+
             -- Vector-type properties can be set with two or three numbers instead of a Vector type.
             newSetter = function(self, p1, p2, p3)
                 local value = ProcessVectorInput(p1, p2, p3)
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActual, altPropertyName)
                 return result
             end
-            
+
         elseif propertyType == "Color" then
-            
+
             -- Color-type properties can be set with three or four numbers instead of a Color type.
             newSetter = function(self, p1, p2, p3, p4)
                 local value = ProcessColorInput(p1, p2, p3, p4)
-                
+
                 -- If they are trying to set the "Color" property of a GUIItem, override the setter.
                 -- This is a special exception due to how "Color" is used as a property of GUIObject
                 -- so as to mix with the "Opacity" property that does not exist within GUIItems.
@@ -2476,59 +2521,59 @@ function GUIObject.GetAutoGeneratedSetter(propertyName, propertyType, itemName, 
                         propertySetterFuncActualOverride = GetFakePropertySetter(itemName)
                     end
                 end
-                
+
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActualOverride, altPropertyName)
                 return result
             end
-            
+
         else
-            
+
             -- Regular setter.
             newSetter = function(self, value)
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActual, altPropertyName)
                 return result
             end
-            
+
         end
-        
+
         autoGeneratedSetters[key] = newSetter
-        
+
     end
-    
+
     return autoGeneratedSetters[key]
-    
+
 end
 
 -- Returns a function to act as a RawSetter for the given property name.  If a preexisting one
 -- cannot be found, a new one is generated.
 local autoGeneratedRawSetters = {}
 function GUIObject.GetAutoGeneratedRawSetter(propertyName, propertyType, itemName, altPropertyName)
-    
+
     assert(type(propertyType) == "string")
-    
+
     itemName = itemName or "rootItem"
     altPropertyName = altPropertyName or propertyName
-    
+
     if not autoGeneratedRawSetters[propertyName] then
-        
+
         local isFake = GetIsaFakeProperty(altPropertyName)
         local propertySetterFuncActual = isFake and GetFakePropertySetter(itemName) or InstancePropertySetter
-        
+
         if propertyType == "Vector" then
-            
+
             -- Vector-type properties can be set with two or three numbers instead of a Vector type.
             newSetter = function(self, p1, p2, p3)
                 local value = ProcessVectorInput(p1, p2, p3)
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActual, altPropertyName, true)
                 return result
             end
-            
+
         elseif propertyType == "Color" then
-            
+
             -- Color-type properties can be set with three or four numbers instead of a Color type.
             newSetter = function(self, p1, p2, p3, p4)
                 local value = ProcessColorInput(p1, p2, p3, p4)
-    
+
                 -- If they are trying to set the "Color" property of a GUIItem, override the setter.
                 -- This is a special exception due to how "Color" is used as a property of GUIObject
                 -- so as to mix with the "Opacity" property that does not exist within GUIItems.
@@ -2540,51 +2585,51 @@ function GUIObject.GetAutoGeneratedRawSetter(propertyName, propertyType, itemNam
                         propertySetterFuncActualOverride = GetFakePropertySetter(itemName)
                     end
                 end
-                
+
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActualOverride, altPropertyName, true)
                 return result
             end
-            
+
         else
-            
+
             -- Regular setter.
             newSetter = function(self, value)
                 local result = PerformSetterDuties(self, propertyName, value, propertySetterFuncActual, altPropertyName, true)
                 return result
             end
-            
+
         end
-        
+
         autoGeneratedSetters[propertyName] = newSetter
-        
+
     end
-    
+
     return autoGeneratedRawSetters[propertyName]
-    
+
 end
 
 -- Returns a function to act as a Getter for the given property name.  If a preexisting one cannot
 -- be found, a new one is generated.
 local autoGeneratedGetters = {}
 function GUIObject.GetAutoGeneratedGetter(propertyName)
-    
+
     if not autoGeneratedGetters[propertyName] then
-    
+
         local isFake = GetIsaFakeProperty(propertyName)
         local getterActual = isFake and FakePropertyGetter or InstancePropertyGetter
-        
+
         local newGetter = function(self, static)
             local result = PerformGetterDuties(self, propertyName, static, getterActual)
             assert(result ~= nil)
             return result
-            
+
         end
         autoGeneratedGetters[propertyName] = newGetter
-        
+
     end
-    
+
     return autoGeneratedGetters[propertyName]
-    
+
 end
 
 -- Declare "Setters" and "Getters" for GUIObject to directly access the values of its root GUIItem.
@@ -2603,13 +2648,13 @@ end
 -- new scale.  Also takes into account if all characters in the text can be rendered by the font,
 -- and if not, uses a fallback font instead.
 function GUIObject:SetFont(fontFamilyName, localSize)
-    
+
     -- Parameters can optionally be passed in as a table with fields "family" and "size"
     if type(fontFamilyName) == "table" then
         localSize = fontFamilyName.size
         fontFamilyName = fontFamilyName.family
     end
-    
+
     -- Choose the font that is the best size for how big the text will be on screen -- not
     -- necessarily the same as its local size (eg it could have a tiny local size, but be scaled
     -- way up by parents).
@@ -2621,7 +2666,7 @@ function GUIObject:SetFont(fontFamilyName, localSize)
     local fontScaleFactor = (localSize / fontActualSize) * fallbackScaling
     self:SetScale(fontScaleFactor.x / absoluteScale.x, fontScaleFactor.y / absoluteScale.y) -- cancel out parent's scale.
     self:SetFontName(fontFile)
-    
+
 end
 
 -- Creates a new property for this class.  Properties store state, provide an interface to their
@@ -2629,18 +2674,18 @@ end
 -- Class properties are automatically created for every instantiation of a class at initialization.
 -- This method can only be called before the first instantiation of a class.
 function GUIObject.AddClassProperty(cls, propertyName, defaultValue, noCopy)
-    
+
     noCopy = (noCopy == true)
-    
+
     -- Check propertyName and defaultValue.
     ValidatePropertyCreation(propertyName, nil, cls, defaultValue)
-    
+
     -- Ensure this class has not yet been instantiated.  Would cause problems later if a property
     -- is assumed to exist in all instances, but doesn't.
     if classInstantiated[cls] then
         error(string.format("Attempt to add class property to class '%s' which has already been instantiated at least once!", cls.classname), 2)
     end
-    
+
     -- Maintain a list of class properties so we can add them all to each instantiation.
     if not cls._classPropList then
         cls._classPropList = {}
@@ -2649,26 +2694,26 @@ function GUIObject.AddClassProperty(cls, propertyName, defaultValue, noCopy)
         -- so in order to detect a "missing" table, we just check if it's the exact same table as
         -- the base class.
         local baseClass = GetBaseClass(cls)
-        
+
         if baseClass and rawequal(cls._classPropList, baseClass._classPropList) then
             cls._classPropList = Copy(baseClass._classPropList) -- copy from the base class.
         end
     end
     table.insert(cls._classPropList, propertyName)
-    
+
     -- Add property fields to object.
     assert(noCopy ~= nil)
-    
+
     cls[GetClassPropertyNoCopyFieldName(propertyName)] = noCopy
     if noCopy then
         cls[GetClassPropertyFieldName(propertyName)] = defaultValue
     else
         cls[GetClassPropertyFieldName(propertyName)] = Copy(defaultValue)
     end
-    
+
     -- Define setter and getter for this property, if they do not already exist.
     AutomaticallyDefineSetterAndGetter(cls, propertyName, GetTypeName(defaultValue))
-    
+
 end
 
 -- Creates a new property for this particular GUIObject.  Properties store state, provide an
@@ -2678,97 +2723,97 @@ end
 -- If a property is going to be used in every single instance of a class, you should create it as a
 -- class property instead -- this way the setters and getters are shared, and take up less memory.
 function GUIObject:AddInstanceProperty(propertyName, defaultValue, noCopy)
-    
+
     AssertIsNotDestroyed(self)
-    
+
     -- Check propertyName and defaultValue.
     ValidatePropertyCreation(propertyName, self, nil, defaultValue)
-     
+
     -- Add property field to object.
     if noCopy then
         self[GetInstancePropertyFieldName(propertyName)] = defaultValue
     else
         self[GetInstancePropertyFieldName(propertyName)] = Copy(defaultValue)
     end
-    
+
     -- Add property name to a list of instance property names.
     self._instancePropList = self._instancePropList or {}
     table.insert(self._instancePropList, propertyName)
-    
+
     -- Define setter and getter for this property, if they do not already exist.
     AutomaticallyDefineSetterAndGetter(self, propertyName, GetTypeName(defaultValue))
-    
+
 end
 
 -- Returns the name of the child item/object that owns the property that is referenced in this object's
 -- composite property.
 function GUIObject:GetCompositePropertyOwnerName(propertyName)
-    
+
     if not self:GetPropertyExists(propertyName) then
         error(string.format("Property '%s' not found! (Neither real nor composite ref)", propertyName), 2)
     end
-    
+
     if self:GetPropertyExists(propertyName, true) then
         error(string.format("Property '%s' is not a composite ref", propertyName), 2)
     end
-    
+
     local ownerName = self[GetCompositeClassPropertyFieldName(propertyName)]
     assert(ownerName)
     return ownerName
-    
+
 end
 
 -- Returns the GUIObject or GUIItem that owns the property that is referenced in this object's
 -- composite property.
 function GUIObject:GetCompositePropertyOwner(propertyName)
-    
+
     local ownerName = self:GetCompositePropertyOwnerName(propertyName)
     local owner = self[ownerName]
     if owner == nil then
         error(string.format("Unable to trace real property from composite reference.  Child object named '%s' does not exist!", ownerName), 2)
     end
-    
+
     return owner
-    
+
 end
 
 -- Returns the owner's name for the referenced property.
 function GUIObject:GetCompositePropertyRealName(propertyName)
-    
+
     if not self:GetPropertyExists(propertyName) then
         error(string.format("Property '%s' not found! (Neither real nor composite ref)", propertyName), 2)
     end
-    
+
     if self:GetPropertyExists(propertyName, true) then
         error(string.format("Property '%s' is not a composite ref", propertyName), 2)
     end
-    
+
     local altPropertyName = self[GetCompositeClassPropertyOtherName(propertyName)] or propertyName
     return altPropertyName
-    
+
 end
 
 -- Provides direct access to a member object's property via this class.  If propertyName isn't the
 -- same in both classes, the member object's propertyName can be specified using
 -- optionalOtherPropertyName (otherwise leave nil).
 function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName, optionalOtherPropertyName)
-    
+
     ValidatePropertyName(propertyName, 1)
-    
+
     if optionalOtherPropertyName ~= nil then
         ValidatePropertyName(optionalOtherPropertyName)
     end
-    
+
     if type(memberObjectName) ~= "string" then
         error(string.format("Expected the name of a member object, got %s-type instead.", GetTypeName(memberObjectName)), 2)
     end
-    
+
     -- Ensure this class has not yet been instantiated.  Would cause problems later if a property
     -- is assumed to exist in all instances, but doesn't.
     if classInstantiated[cls] then
         error(string.format("Attempt to add class composite property to class '%s' which has already been instantiated at least once!", cls.classname), 2)
     end
-    
+
     -- Maintain a list of composite class property names.
     if not cls._classCompositePropList then
         cls._classCompositePropList = {}
@@ -2777,23 +2822,23 @@ function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName
         -- so in order to detect a "missing" table, we just check if it's the exact same table as
         -- the base class.
         local baseClass = GetBaseClass(cls)
-        
+
         if baseClass and rawequal(cls._classCompositePropList, baseClass._classCompositePropList) then
             cls._classCompositePropList = Copy(baseClass._classCompositePropList) -- copy from the base class.
         end
     end
     table.insert(cls._classCompositePropList, propertyName)
-    
+
     -- This class can reference another object's property using a different name.
     local thisPropertyName = propertyName
     local memberPropertyName = optionalOtherPropertyName ~= nil and optionalOtherPropertyName or propertyName
-    
+
     -- Make note of what the other object calls the property if it differs.
     cls[GetCompositeClassPropertyFieldName(thisPropertyName)] = memberObjectName
     if memberPropertyName ~= thisPropertyName then
         cls[GetCompositeClassPropertyOtherName(thisPropertyName)] = memberPropertyName
     end
-    
+
     -- Define setter and getter for this property that simply passes the call through to the member
     -- object (if setters and getters aren't manually defined).
     local getterName = GetGetterNameForProperty(thisPropertyName)
@@ -2803,7 +2848,7 @@ function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName
             assert(memberObject ~= nil)
             local memberPropertyName = self[GetCompositeClassPropertyOtherName(thisPropertyName)] or thisPropertyName
             local result
-            
+
             -- Need to omit the "static" parameter for GUIItems, otherwise the engine will complain.
             local getterName = GetGetterNameForProperty(memberPropertyName)
             if memberObject:isa("GUIItem") then
@@ -2811,12 +2856,12 @@ function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName
             else
                 result = memberObject[getterName](memberObject, static)
             end
-            
+
             assert(result ~= nil)
             return result
         end
     end
-    
+
     local setterName = GetSetterNameForProperty(thisPropertyName)
     if not cls[setterName] then
         cls[setterName] = function(self, p1, p2, p3, p4)
@@ -2824,30 +2869,30 @@ function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName
             local memberObject = self[memberObjectName]
             assert(memberObject ~= nil)
             local memberPropertyName = self[GetCompositeClassPropertyOtherName(thisPropertyName)] or thisPropertyName
-            
+
             -- memberObject can be either a GUIObject or a GUIItem.
             if memberObject:isa("GUIObject") then
-                
+
                 -- If it is a GUIObject, all we have to do is forward the call to the object.
                 local result = memberObject[GetSetterNameForProperty(memberPropertyName)](memberObject, p1, p2, p3, p4)
                 return result
-                
+
                 -- We do not need to fire any On_____Changed events from this.  They will be
                 -- automatically forwarded from the property's actual location.
-                
+
             else
-                
+
                 -- If it is a GUIItem, we need to make sure we're dispatching the correct events and such.
                 local propertyType = g_GUIItemPropertyTypes[memberPropertyName]
                 assert(propertyType)
                 local setter = GUIObject.GetAutoGeneratedSetter(thisPropertyName, propertyType, memberObjectName, memberPropertyName)
                 local result = setter(self, p1, p2, p3, p4)
                 return result
-                
+
             end
         end
     end
-    
+
     local rawSetterName = GetRawSetterNameForProperty(thisPropertyName)
     if not cls[rawSetterName] then
         cls[rawSetterName] = function(self, p1, p2, p3, p4)
@@ -2855,30 +2900,30 @@ function GUIObject.AddCompositeClassProperty(cls, propertyName, memberObjectName
             local memberObject = self[memberObjectName]
             assert(memberObject ~= nil)
             local memberPropertyName = self[GetCompositeClassPropertyOtherName(thisPropertyName)] or thisPropertyName
-            
+
             -- memberObject can be either a GUIObject or a GUIItem.
             if memberObject:isa("GUIObject") then
-                
+
                 -- If it is a GUIObject, all we have to do is forward the call to the object.
                 local result = memberObject[GetSetterNameForProperty(memberPropertyName)](memberObject, p1, p2, p3, p4)
                 return result
-                
+
                 -- We do not need to fire any On_____Changed events from this.  They will be
                 -- automatically forwarded from the property's actual location.
-            
+
             else
-                
+
                 -- If it is a GUIItem, we need to make sure we're dispatching the correct events and such.
                 local propertyType = g_GUIItemPropertyTypes[memberPropertyName]
                 assert(propertyType)
                 local rawSetter = GUIObject.GetAutoGeneratedRawSetter(thisPropertyName, propertyType, memberObjectName, memberPropertyName)
                 local result = rawSetter(self, p1, p2, p3, p4)
                 return result
-            
+
             end
         end
     end
-    
+
 end
 
 -- Returns true if a property with the given name exists for this object (including GUIItem
@@ -2894,7 +2939,7 @@ function GUIObject:GetPropertyExists(propertyName, prohibitCompositeRefs, errorD
     end
 
     return result
-    
+
 end
 
 -- Returns the value of the given property belonging to this object.
@@ -3003,66 +3048,66 @@ end
 
 -- Convenience.  Calls SetPosition() on this object, but with the y component set to GetPosition().y.
 function GUIObject:SetX(xOrVec)
-    
+
     RequireType({"number", "Vector"}, xOrVec, "xOrVec")
-    
+
     local xActual
     if type(xOrVec) == "number" then
         xActual = xOrVec
     else
         xActual = xOrVec.x
     end
-    
+
     return (self:SetPosition(xActual, self:GetPosition().y))
-    
+
 end
 
 -- Convenience.  Calls SetPosition() on this object, but with the x component set to GetPosition().x.
 function GUIObject:SetY(yOrVec)
-    
+
     RequireType({"number", "Vector"}, yOrVec, "yOrVec")
-    
+
     local yActual
     if type(yOrVec) == "number" then
         yActual = yOrVec
     else
         yActual = yOrVec.y
     end
-    
+
     return (self:SetPosition(self:GetPosition().x, yActual))
-    
+
 end
 
 -- Convenience.  Calls SetSize() on this object, but with the height value set to GetSize().y.
 function GUIObject:SetWidth(widthOrVector)
-    
+
     RequireType({"number", "Vector"}, widthOrVector, "widthOrVector")
-    
+
     local widthActual
     if type(widthOrVector) == "number" then
         widthActual = widthOrVector
     else
         widthActual = widthOrVector.x
     end
-    
+
     return (self:SetSize(widthActual, self:GetSize().y))
-    
+
 end
 
 -- Convenience.  Calls SetSize() on this object, but with the width value set to GetSize().x.
 function GUIObject:SetHeight(heightOrVector)
-    
+
     RequireType({"number", "Vector"}, heightOrVector, "heightOrVector")
-    
+
     local heightActual
     if type(heightOrVector) == "number" then
         heightActual = heightOrVector
     else
         heightActual = heightOrVector.y
     end
-    
+
     return (self:SetSize(self:GetSize().x, heightActual))
-    
+
 end
 
 function GUIObject:GetTextureSize()

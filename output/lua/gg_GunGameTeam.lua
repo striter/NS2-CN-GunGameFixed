@@ -5,6 +5,8 @@
 
 if Server then
 
+    Script.Load("lua/bots/MarineTeamBrain.lua")
+    
     class 'GunGameTeam' (PlayingTeam)
 
     -- Set nanoshield only once (if its not already active)
@@ -140,6 +142,15 @@ if Server then
         player:SetTeamNumber(self:GetTeamNumber())  -- fix for team number.
         player.teamResources = self.teamResources
         return added
+    end
+
+    function GunGameTeam:GetTeamBrain()  --FIXME-BOT Ideally, this should NOT late-init. Better to init, and perform conditional updates than get hit at run-time
+        if self.brain == nil then
+            self.brain = MarineTeamBrain()
+            self.brain:Initialize(self.teamName.."-Brain", self:GetTeamNumber())
+        end
+
+        return self.brain
     end
 
     function GunGameTeam:RespawnPlayer(player, origin, angles)

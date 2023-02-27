@@ -66,11 +66,3 @@ Script.Load("lua/gg_TechLevelHooks.lua")
 Script.Load("lua/gg_TechLevelSystem.lua")
 
 Script.Load("lua/gg_PlayerHooks.lua")
-
--- this overrides global methods to have only marine units
-function GetIsMarineUnit(entity)
-    return entity and HasMixin(entity, "Team")
-end
-function GetIsAlienUnit(entity)
-    return false
-end

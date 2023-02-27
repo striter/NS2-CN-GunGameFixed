@@ -24,7 +24,7 @@ ModLoader.SetupFileHook("lua/bots/PlayerBot.lua", "lua/bots/gg_bot_PlayerBot.lua
 ModLoader.SetupFileHook("lua/bots/PlayerBrain.lua", "lua/gg_ns2fix/gg_PlayerBrain.lua", "post")
 ModLoader.SetupFileHook("lua/Weapons/Marine/Railgun.lua", "lua/gg_ns2fix/gg_Railgun.lua", "post")
 ModLoader.SetupFileHook("lua/GUI/GUIObject.lua", "lua/gg_ns2fix/gg_GUIObject.lua", "replace")
-ModLoader.SetupFileHook("lua/ClientUI.lua", "lua/gg_ns2fix/gg_ClientUI.lua", "replace")
+--ModLoader.SetupFileHook("lua/ClientUI.lua", "lua/gg_ns2fix/gg_ClientUI.lua", "replace")
 ModLoader.SetupFileHook("lua/ConcedeSequence.lua", "lua/gg_ns2fix/gg_ConcedeSequence.lua", "post")
 
 -- Hide the top bar
@@ -34,3 +34,4 @@ ModLoader.SetupFileHook("lua/Hud2/topBar/GUIHudTopBarForLocalTeam.lua", "lua/gg_
 ModLoader.SetupFileHook("lua/Marine.lua", "lua/gg_Marine.lua", "post" )
 ModLoader.SetupFileHook("lua/CatPack.lua", "lua/gg_CatPack.lua", "post" )
 ModLoader.SetupFileHook("lua/Balance.lua", "lua/gg_Balance.lua", "post" )
+ModLoader.SetupFileHook("lua/NS2Utility.lua", "lua/gg_NS2Utility.lua", "post" )
