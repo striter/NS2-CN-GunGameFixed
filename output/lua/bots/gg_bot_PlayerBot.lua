@@ -3,6 +3,8 @@
 	ZycaR (c) 2016
 ]]
 
+if not Server then return end
+
 Script.Load("lua/bots/gg_bot_GunGameBrain.lua")
 
 function PlayerBot:_LazilyInitBrain()
